@@ -13,37 +13,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import time
 from datetime import datetime
-from paste.deploy import appconfig
-import shutil
 import hashlib
-import urllib
+import os
+import shutil
+from slogging import common
 import sqlite3
 
 from swift.account.backend import AccountBroker
 from swift.account.server import DATADIR as account_server_data_dir
-from swift.container.backend import ContainerBroker
-from swift.container.server import DATADIR as container_server_data_dir
-from swift.common.utils import renamer, get_logger, readconf, mkdirs, \
-    TRUE_VALUES, remove_file
 from swift.common.constraints import check_mount
 from swift.common.daemon import Daemon
-from slogging import common
+from swift.common import utils
+from swift.container.backend import ContainerBroker
+from swift.container.server import DATADIR as container_server_data_dir
+
+import time
 from tzlocal import get_localzone
+import urllib
+
 
 local_zone = get_localzone()
 
 
 class DatabaseStatsCollector(Daemon):
-    """
-    Extract storage stats from account databases on the account
-    storage nodes
+    """DatabaseStatsCollector class.
+
+    Extract storage stats from account databases on the
+    account storage nodes.
 
     Any subclasses must define the function get_data.
     """
-
     def __init__(self, stats_conf, stats_type, data_dir, filename_format):
         super(DatabaseStatsCollector, self).__init__(stats_conf)
         self.stats_type = stats_type
@@ -51,20 +51,23 @@ class DatabaseStatsCollector(Daemon):
         self.filename_format = filename_format
         self.devices = stats_conf.get('devices', '/srv/node')
         self.mount_check = stats_conf.get('mount_check',
-                                           'true').lower() in TRUE_VALUES
+                                          'true').lower() in utils.TRUE_VALUES
         self.target_dir = stats_conf.get('log_dir', '/var/log/swift')
-        mkdirs(self.target_dir)
-        self.logger = get_logger(stats_conf,
-                                 log_route='%s-stats' % stats_type)
+        utils.mkdirs(self.target_dir)
+        self.logger = utils.get_logger(stats_conf,
+                                       log_route='%s-stats' % stats_type)
         self.time_zone = common.get_time_zone(stats_conf, self.logger,
                                               'time_zone', str(local_zone))
 
     def run_once(self, *args, **kwargs):
-        self.logger.info(_("Gathering %s stats" % self.stats_type))
+        self.logger.info(_("Gathering %s stats") % self.stats_type)
         start = time.time()
         self.find_and_process()
-        self.logger.info(_("Gathering %s stats complete (%0.2f minutes)") %
-                         (self.stats_type, (time.time() - start) / 60))
+
+        msg = _("Gathering %(stats_type)s stats complete "
+                "(%(time)0.2f minutes)") % {'stats_type': self.stats_type,
+                                            'time': (time.time() - start) / 60}
+        self.logger.info(msg)
 
     def get_data(self):
         raise NotImplementedError('Subclasses must override')
@@ -78,7 +81,7 @@ class DatabaseStatsCollector(Daemon):
         working_dir = os.path.join(self.target_dir,
                                    '.%-stats_tmp' % self.stats_type)
         shutil.rmtree(working_dir, ignore_errors=True)
-        mkdirs(working_dir)
+        utils.mkdirs(working_dir)
         tmp_filename = os.path.join(working_dir, src_filename)
         hasher = hashlib.md5()
         try:
@@ -101,35 +104,37 @@ class DatabaseStatsCollector(Daemon):
                                 db_path = os.path.join(root, filename)
                                 try:
                                     line_data = self.get_data(db_path)
-                                except sqlite3.Error, err:
-                                    self.logger.info(
-                                        _("Error accessing db %s: %s") %
-                                          (db_path, err))
+                                except sqlite3.Error as err:
+                                    values = {'db_path': db_path, 'err': err}
+                                    msg = _("Error accessing db "
+                                            "%(db_path)s: %(err)s") % values
+                                    self.logger.info(msg)
                                     continue
                                 if line_data:
                                     statfile.write(line_data)
                                     hasher.update(line_data)
 
             src_filename += hasher.hexdigest()
-            renamer(tmp_filename, os.path.join(self.target_dir, src_filename))
+            utils.renamer(tmp_filename,
+                          os.path.join(self.target_dir, src_filename))
         finally:
             shutil.rmtree(working_dir, ignore_errors=True)
 
 
 class AccountStatsCollector(DatabaseStatsCollector):
-    """
+    """AccountStatsCollector class.
+
     Extract storage stats from account databases on the account
     storage nodes
     """
-
     def __init__(self, stats_conf):
         super(AccountStatsCollector, self).__init__(stats_conf, 'account',
                                                     account_server_data_dir,
                                                     'stats-%Y%m%d%H_')
 
     def get_data(self, db_path):
-        """
-        Data for generated csv has the following columns:
+        """Data for generated csv has the following columns:
+
         Account Hash, Container Count, Object Count, Bytes Used
 
         :raises sqlite3.Error: does not catch errors connecting to db
@@ -149,19 +154,21 @@ class AccountStatsCollector(DatabaseStatsCollector):
 
 
 class ContainerStatsCollector(DatabaseStatsCollector):
-    """
+    """ContainerStatsCollector class
+
     Extract storage stats from container databases on the container
     storage nodes
     """
-
     def __init__(self, stats_conf):
-        super(ContainerStatsCollector, self).__init__(stats_conf, 'container',
-                                                   container_server_data_dir,
-                                                   'container-stats-%Y%m%d%H_')
+        super(ContainerStatsCollector, self).__init__(
+            stats_conf, 'container',
+            container_server_data_dir,
+            'container-stats-%Y%m%d%H_')
         # webob calls title on all the header keys
-        self.metadata_keys = ['X-Container-Meta-%s' % mkey.strip().title()
-                for mkey in stats_conf.get('metadata_keys', '').split(',')
-                if mkey.strip()]
+        self.metadata_keys = [
+            'X-Container-Meta-%s' % mkey.strip().title()
+            for mkey in stats_conf.get('metadata_keys', '').split(',')
+            if mkey.strip()]
 
     def get_header(self):
         header = 'Account Hash,Container Name,Object Count,Bytes Used'
@@ -172,9 +179,10 @@ class ContainerStatsCollector(DatabaseStatsCollector):
         return header
 
     def get_data(self, db_path):
-        """
-        Data for generated csv has the following columns:
+        """Data for generated csv has the following columns:
+
         Account Hash, Container Name, Object Count, Bytes Used
+
         This will just collect whether or not the metadata is set
         using a 1 or ''.
 

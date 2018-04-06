@@ -1,17 +1,16 @@
-Swift stats system
-==================
+====================
+Welcome to slogging!
+====================
 
-The swift stats system is composed of three parts parts: log creation, log
-uploading, and log processing. The system handles two types of logs (access
-and account stats), but it can be extended to handle other types of logs.
+slogging is a stats and logging tools for OpenStack Swift.
 
-How to Build to Debian Packages
-===============================
+* License: Apache license
+* Documentation: https://docs.openstack.org/slogging/latest/
+* Source: https://git.openstack.org/cgit/openstack/slogging
+* Bugs: https://bugs.launchpad.net/slogging
 
-Make sure you have python-stdeb installed first:
+Team and repository tags
+------------------------
 
-    sudo apt-get install python-stdeb
-
-then:
-
-    python setup.py --command-packages=stdeb.command bdist_deb
+.. image:: https://governance.openstack.org/tc/badges/slogging.svg
+    :target: http://governance.openstack.org/reference/tags/index.html

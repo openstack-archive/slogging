@@ -13,35 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ConfigParser import ConfigParser
-import zlib
-import time
-import datetime
-import cStringIO
 import collections
-from paste.deploy import appconfig
-import multiprocessing
-import Queue
 import cPickle
+import cStringIO
+import datetime
 import hashlib
-from tzlocal import get_localzone
-import json
 import io
-
-from slogging.internal_proxy import InternalProxy
-from swift.common.utils import get_logger, readconf
-from swift.common.daemon import Daemon
-from slogging.log_common import LogProcessorCommon, multiprocess_collate, \
-                                   BadFileDownload
+import json
 from slogging import common
+from slogging import log_common
+from swift.common.daemon import Daemon
+from swift.common import utils
+import time
+from tzlocal import get_localzone
+
 
 now = datetime.datetime.now
 local_zone = get_localzone()
 
 
-class LogProcessor(LogProcessorCommon):
-    """Load plugins, process logs"""
+class LogProcessor(log_common.LogProcessorCommon):
+    """LogProcessor class.
 
+    Load plugins, process logs
+    """
     def __init__(self, conf, logger):
         basic_conf = conf['log-processor']
         super(LogProcessor, self).__init__(basic_conf, logger, 'log-processor')
@@ -63,8 +58,8 @@ class LogProcessor(LogProcessorCommon):
 
     def process_one_file(self, plugin_name, account, container, object_name):
         self.logger.info(_('Processing %(obj)s with plugin "%(plugin)s"') %
-                    {'obj': '/'.join((account, container, object_name)),
-                     'plugin': plugin_name})
+                         {'obj': '/'.join((account, container, object_name)),
+                          'plugin': plugin_name})
         # get an iter of the object data
         compressed = object_name.endswith('.gz')
         stream = self.get_object_data(account, container, object_name,
@@ -121,16 +116,16 @@ class LogProcessor(LogProcessorCommon):
 
 
 class LogProcessorDaemon(Daemon):
-    """
-    Gather raw log data and farm proccessing to generate a csv that is
+    """Log Processor Daemon class.
+
+    Gather raw log data and farm processing to generate a csv that is
     uploaded to swift.
     """
-
     def __init__(self, conf):
         c = conf.get('log-processor')
         super(LogProcessorDaemon, self).__init__(c)
         self.total_conf = conf
-        self.logger = get_logger(c, log_route='log-processor')
+        self.logger = utils.get_logger(c, log_route='log-processor')
         self.log_processor = LogProcessor(conf, self.logger)
         self.lookback_hours = int(c.get('lookback_hours', '120'))
         self.lookback_window = int(c.get('lookback_window',
@@ -147,7 +142,8 @@ class LogProcessorDaemon(Daemon):
                                                   'format_type', 'csv')
 
     def get_lookback_interval(self):
-        """
+        """Get lookback interval.
+
         :returns: lookback_start, lookback_end.
 
             Both or just lookback_end can be None. Otherwise, returns strings
@@ -169,19 +165,17 @@ class LogProcessorDaemon(Daemon):
                 lookback_end = None
             else:
                 delta_window = datetime.timedelta(hours=self.lookback_window)
-                lookback_end = now(self.time_zone) - \
-                               delta_hours + \
-                               delta_window
+                lookback_end = now(self.time_zone) - delta_hours + delta_window
                 lookback_end = lookback_end.strftime('%Y%m%d%H')
         return lookback_start, lookback_end
 
     def get_processed_files_list(self):
-        """
-        :returns: a set of files that have already been processed or returns
-        None on error.
+        """Downloads the set from the stats account.
 
-            Downloads the set from the stats account. Creates an empty set if
-            the an existing file cannot be found.
+        Creates an empty set if the an existing file cannot be found.
+
+        :returns: a set of files that have already been processed or returns
+            None on error.
         """
         try:
             # Note: this file (or data set) will grow without bound.
@@ -191,16 +185,16 @@ class LogProcessorDaemon(Daemon):
             # There is not a good way to determine when an old entry should be
             # pruned (lookback_hours could be set to anything and could change)
             stream = self.log_processor.get_object_data(
-                         self.log_processor_account,
-                         self.log_processor_container,
-                         self.processed_files_filename,
-                         compressed=True)
+                self.log_processor_account,
+                self.log_processor_container,
+                self.processed_files_filename,
+                compressed=True)
             buf = '\n'.join(x for x in stream)
             if buf:
                 files = cPickle.loads(buf)
             else:
                 return None
-        except BadFileDownload, err:
+        except log_common.BadFileDownload as err:
             if err.status_code == 404:
                 files = set()
             else:
@@ -208,11 +202,11 @@ class LogProcessorDaemon(Daemon):
         return files
 
     def get_aggregate_data(self, processed_files, input_data):
-        """
-        Aggregates stats data by account/hour, summing as needed.
+        """Aggregates stats data by account/hour, summing as needed.
 
         :param processed_files: set of processed files
-        :param input_data: is the output from multiprocess_collate/the plugins.
+        :param input_data: is the output from
+            log_common.multiprocess_collate/the plugins.
 
         :returns: A dict containing data aggregated from the input_data
         passed in.
@@ -250,8 +244,7 @@ class LogProcessorDaemon(Daemon):
         return aggr_data
 
     def get_final_info(self, aggr_data):
-        """
-        Aggregates data from aggr_data based on the keylist mapping.
+        """Aggregates data from aggr_data based on the keylist mapping.
 
         :param aggr_data: The results of the get_aggregate_data function.
         :returns: a dict of further aggregated data
@@ -287,21 +280,22 @@ class LogProcessorDaemon(Daemon):
         return final_info
 
     def store_processed_files_list(self, processed_files):
-        """
-        Stores the proccessed files list in the stats account.
+        """Stores the proccessed files list in the stats account.
 
         :param processed_files: set of processed files
         """
 
         s = cPickle.dumps(processed_files, cPickle.HIGHEST_PROTOCOL)
         f = cStringIO.StringIO(s)
-        self.log_processor.internal_proxy.upload_file(f,
+        self.log_processor.internal_proxy.upload_file(
+            f,
             self.log_processor_account,
             self.log_processor_container,
             self.processed_files_filename)
 
     def get_output(self, final_info):
-        """
+        """Return data according to given format_type.
+
         :returns: a list of rows to appear in the csv file or
                   a dictionary to appear in the json file.
 
@@ -345,14 +339,11 @@ class LogProcessorDaemon(Daemon):
         return output
 
     def restructure_stats_dictionary(self, target_dict):
-        """
-        Restructure stats dictionary for json format.
+        """Restructure stats dictionary for json format.
 
         :param target_dict: dictionary of restructuring target
-
         :returns: restructured stats dictionary
         """
-
         account_stats = {}
         access_stats = {}
         account_stats_key_list = \
@@ -369,15 +360,13 @@ class LogProcessorDaemon(Daemon):
         return hourly_stats
 
     def store_output(self, output):
-        """
-        Takes the dictionary or the list of rows and stores a json/csv file of
-        the values in the stats account.
+        """Takes the dictionary or the list of rows.
 
-        :param output: a dictonary or a list of row
+        And stores a json/csv file of the values in the stats account.
 
+        :param output: a dictionary or a list of row
             This json or csv file is final product of this script.
         """
-
         if self.format_type == 'json':
             out_buf = json.dumps(output, indent=2)
             h = hashlib.md5(out_buf).hexdigest()
@@ -390,32 +379,27 @@ class LogProcessorDaemon(Daemon):
             upload_name = datetime.datetime.now(self.time_zone).strftime(
                 '%Y/%m/%d/%H/') + '%s.csv.gz' % h
             f = cStringIO.StringIO(out_buf)
-        self.log_processor.internal_proxy.upload_file(f,
+        self.log_processor.internal_proxy.upload_file(
+            f,
             self.log_processor_account,
             self.log_processor_container,
             upload_name)
 
     @property
     def keylist_mapping(self):
-        """
-        :returns: the keylist mapping.
-
-            The keylist mapping determines how the stats fields are aggregated
-            in the final aggregation step.
-        """
-
-        if self._keylist_mapping == None:
+        """Determines how the stats fields are aggregated in the fila step."""
+        if self._keylist_mapping is None:
             self._keylist_mapping = \
                 self.log_processor.generate_keylist_mapping()
         return self._keylist_mapping
 
     def process_logs(self, logs_to_process, processed_files):
-        """
+        """Process logs and returns result as list.
+
         :param logs_to_process: list of logs to process
         :param processed_files: set of processed files
 
         :returns: returns a list of rows of processed data.
-
             The first row is the column headers. The rest of the rows contain
             hourly aggregate data for the account specified in the row.
 
@@ -427,9 +411,12 @@ class LogProcessorDaemon(Daemon):
 
         # map
         processor_args = (self.total_conf, self.logger)
-        results = multiprocess_collate(LogProcessor, processor_args,
-                                       'process_one_file', logs_to_process,
-                                       self.worker_count)
+        results = log_common.multiprocess_collate(
+            LogProcessor,
+            processor_args,
+            'process_one_file',
+            logs_to_process,
+            self.worker_count)
 
         # reduce
         aggr_data = self.get_aggregate_data(processed_files, results)
@@ -445,14 +432,11 @@ class LogProcessorDaemon(Daemon):
         return self.get_output(final_info)
 
     def run_once(self, *args, **kwargs):
-        """
-        Process log files that fall within the lookback interval.
+        """Process log files that fall within the lookback interval.
 
         Upload resulting csv or json file to stats account.
-
         Update processed files list and upload to stats account.
         """
-
         for k in 'lookback_hours lookback_window'.split():
             if k in kwargs and kwargs[k] is not None:
                 setattr(self, k, kwargs[k])
@@ -465,17 +449,18 @@ class LogProcessorDaemon(Daemon):
         self.logger.debug('lookback_end: %s' % lookback_end)
 
         processed_files = self.get_processed_files_list()
-        if processed_files == None:
+        if processed_files is None:
             self.logger.error(_('Log processing unable to load list of '
-                'already processed log files'))
+                                'already processed log files'))
             return
         self.logger.debug(_('found %d processed files') %
-            len(processed_files))
+                          len(processed_files))
 
-        logs_to_process = self.log_processor.get_data_list(lookback_start,
+        logs_to_process = self.log_processor.get_data_list(
+            lookback_start,
             lookback_end, processed_files)
         self.logger.info(_('loaded %d files to process') %
-            len(logs_to_process))
+                         len(logs_to_process))
 
         if logs_to_process:
             output = self.process_logs(logs_to_process, processed_files)
@@ -485,4 +470,4 @@ class LogProcessorDaemon(Daemon):
             self.store_processed_files_list(processed_files)
 
         self.logger.info(_("Log processing done (%0.2f minutes)") %
-            ((time.time() - start) / 60))
+                         ((time.time() - start) / 60))

@@ -13,25 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import time
 import collections
-import datetime
-from uuid import uuid4
-import Queue
-from urllib import unquote
-import os
-import cPickle
-import cStringIO
 import functools
+import os
 import random
-import errno
+import time
+
+from urllib import unquote
+from uuid import uuid4
+
+from slogging.file_buffer import FileBuffer
+from slogging import log_common
 
 from swift.common.daemon import Daemon
-from swift.common.utils import get_logger, TRUE_VALUES, split_path
-from swift.common.exceptions import LockTimeout, ChunkReadTimeout
-from slogging.log_common import LogProcessorCommon, multiprocess_collate, \
-                                   BadFileDownload
-from slogging.file_buffer import FileBuffer
+from swift.common import utils
 
 
 month_map = '_ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split()
@@ -71,34 +66,34 @@ def memoize(func):
     return wrapped
 
 
-class AccessLogDelivery(LogProcessorCommon):
+class AccessLogDelivery(log_common.LogProcessorCommon):
 
     def __init__(self, conf, logger):
         super(AccessLogDelivery, self).__init__(conf, logger,
                                                 'access-log-delivery')
         self.frequency = int(conf.get('frequency', '3600'))
-        self.metadata_key = conf.get('metadata_key',
-                                'x-container-meta-access-log-delivery').lower()
+        self.metadata_key = conf.get(
+            'metadata_key',
+            'x-container-meta-access-log-delivery').lower()
         self.server_name = conf.get('server_name', 'proxy-server')
         self.working_dir = conf.get('working_dir', '/tmp/swift').rstrip('/')
         buffer_limit = conf.get('buffer_limit', '10485760')
         self.file_buffer = FileBuffer(buffer_limit, logger)
         self.hidden_ips = [x.strip() for x in
-                            conf.get('hidden_ips', '').split(',') if x.strip()]
+                           conf.get('hidden_ips', '').split(',') if x.strip()]
         self.source_account = conf['log_source_account']
         self.source_container = conf.get('log_source_container_name',
                                          'log_data')
 
     def get_logs_to_process(self, already_processed_files):
         lookback_start, lookback_end = self.calculate_lookback()
-        logs_to_process = self.get_container_listing(
-                                                self.source_account,
-                                                self.source_container,
-                                                lookback_start,
-                                                lookback_end,
-                                                already_processed_files)
+        logs_to_process = self.get_container_listing(self.source_account,
+                                                     self.source_container,
+                                                     lookback_start,
+                                                     lookback_end,
+                                                     already_processed_files)
         logs_to_process = [(self.source_account, self.source_container, x)
-                            for x in logs_to_process]
+                           for x in logs_to_process]
         self.logger.info(_('loaded %d files to process') %
                          len(logs_to_process))
         return logs_to_process
@@ -108,16 +103,16 @@ class AccessLogDelivery(LogProcessorCommon):
         try:
             year, month, day, hour, _unused = object_name.split('/', 4)
         except ValueError:
-            self.logger.info(_('Odd object name: %s. Skipping' % object_name))
+            self.logger.info(_('Odd object name: %s. Skipping') % object_name)
             return
         filename_pattern = '%s/%%s/%%s/%s/%s/%s/%s' % (self.working_dir, year,
-                                                   month, day, hour)
-        self.logger.debug(_('Processing %s' % object_name))
+                                                       month, day, hour)
+        self.logger.debug(_('Processing %s') % object_name)
         # get an iter of the object data
         compressed = object_name.endswith('.gz')
         stream = self.get_object_data(account, container, object_name,
                                       compressed=compressed)
-        buff = collections.defaultdict(list)
+        collections.defaultdict(list)
         for line in stream:
             clf, account, container = self.convert_log_line(line)
             if not clf or not account or not container:
@@ -138,7 +133,7 @@ class AccessLogDelivery(LogProcessorCommon):
             metadata = self.internal_proxy.get_container_metadata(account,
                                                                   container)
             val = metadata.get(self.metadata_key, '')
-            flag = val.lower() in TRUE_VALUES
+            flag = val.lower() in utils.TRUE_VALUES
             self.memcache.set(key, flag, timeout=self.frequency)
         return flag
 
@@ -161,38 +156,39 @@ class AccessLogDelivery(LogProcessorCommon):
                     # internal proxy log
                     return {}
             (unused,
-            server,
-            client_ip,
-            lb_ip,
-            timestamp,
-            method,
-            request,
-            http_version,
-            code,
-            referrer,
-            user_agent,
-            auth_token,
-            bytes_in,
-            bytes_out,
-            etag,
-            trans_id,
-            headers,
-            processing_time) = (unquote(x) for x in log_arr[:18])
+             server,
+             client_ip,
+             lb_ip,
+             timestamp,
+             method,
+             request,
+             http_version,
+             code,
+             referrer,
+             user_agent,
+             auth_token,
+             bytes_in,
+             bytes_out,
+             etag,
+             trans_id,
+             headers,
+             processing_time) = (unquote(x) for x in log_arr[:18])
         except ValueError:
             self.logger.debug(_('Bad line data: %s') % repr(raw_log))
             return {}
         if server != self.server_name:
             # incorrect server name in log line
-            self.logger.debug(_('Bad server name: found "%(found)s" ' \
-                    'expected "%(expected)s"') %
-                    {'found': server, 'expected': self.server_name})
+            self.logger.debug(
+                _('Bad server name: found "%(found)s" '
+                  'expected "%(expected)s"') %
+                {'found': server, 'expected': self.server_name})
             return {}
         try:
             (version, account, container_name, object_name) = \
-                split_path(request, 2, 4, True)
-        except ValueError, e:
+                utils.split_path(request, 2, 4, True)
+        except ValueError as e:
             self.logger.debug(_('Invalid path: %(error)s from data: %(log)s') %
-            {'error': e, 'log': repr(raw_log)})
+                              {'error': e, 'log': repr(raw_log)})
             return {}
         if container_name is not None:
             container_name = container_name.split('?', 1)[0]
@@ -234,15 +230,16 @@ class AccessLogDelivery(LogProcessorCommon):
 
 
 class AccessLogDeliveryDaemon(Daemon):
-    """
-    Processes access (proxy) logs to split them up by account and deliver the
-    split logs to their respective accounts.
+    """AccessLogDeliveryDaemon class.
+
+    Processes access (proxy) logs to split them up by
+    account and deliver the split logs to their respective accounts.
     """
 
     def __init__(self, c):
         self.conf = c
         super(AccessLogDeliveryDaemon, self).__init__(c)
-        self.logger = get_logger(c, log_route='access-log-delivery')
+        self.logger = utils.get_logger(c, log_route='access-log-delivery')
         self.log_processor = AccessLogDelivery(c, self.logger)
         self.log_delivery_account = c['swift_account']
         self.log_delivery_container = c.get('container_name',
@@ -269,16 +266,19 @@ class AccessLogDeliveryDaemon(Daemon):
             self.log_processor.get_logs_to_process(already_processed_files)
         if not logs_to_process:
             self.logger.info(_("Log processing done (%0.2f minutes)") %
-                        ((time.time() - start) / 60))
+                             ((time.time() - start) / 60))
             return
 
         # map
         processor_args = (self.conf, self.logger)
-        results = multiprocess_collate(AccessLogDelivery, processor_args,
-                                       'process_one_file', logs_to_process,
-                                       self.worker_count)
+        results = log_common.multiprocess_collate(
+            AccessLogDelivery,
+            processor_args,
+            'process_one_file',
+            logs_to_process,
+            self.worker_count)
 
-        #reduce
+        # reduce
         processed_files = already_processed_files
         files_to_upload = set()
         for item, data in results:
@@ -292,24 +292,25 @@ class AccessLogDeliveryDaemon(Daemon):
             account, target_name = target_name.split('/', 1)
             some_id = uuid4().hex
             target_name = '%s/%s.log.gz' % (target_name, some_id)
-            success = self.log_processor.internal_proxy.upload_file(filename,
-                            account,
-                            self.target_container,
-                            target_name)
+            success = self.log_processor.internal_proxy.upload_file(
+                filename,
+                account,
+                self.target_container,
+                target_name)
             if success:
                 os.unlink(filename)
                 self.logger.debug('Uploaded %s to account %s' % (filename,
                                                                  account))
             else:
-                self.logger.error('Could not upload %s to account %s' % (
-                                    filename, account))
+                self.logger.error('Could not upload %s to account %s' %
+                                  (filename, account))
 
         # cleanup
         success = self.log_processor.save_processed_files(processed_files)
         if not success:
             self.logger.error('Error uploading updated processed files log')
         self.logger.info(_("Log processing done (%0.2f minutes)") %
-                    ((time.time() - start) / 60))
+                         ((time.time() - start) / 60))
 
     def run_forever(self, *a, **kw):
         while True:

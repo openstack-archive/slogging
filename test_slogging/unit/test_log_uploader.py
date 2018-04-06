@@ -13,25 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
-import os
 from datetime import datetime
-from tempfile import mkdtemp
-from shutil import rmtree
-from functools import partial
-from collections import defaultdict
-import random
-import string
-
-from test_slogging.unit import temptree
-from slogging import log_uploader
-
 import logging
+import os
+import random
+from slogging import log_uploader
+import string
+from test.unit import temptree
+import unittest
+
 logging.basicConfig(level=logging.DEBUG)
 LOGGER = logging.getLogger()
 
 COMPRESSED_DATA = '\x1f\x8b\x08\x08\x87\xa5zM\x02\xffdata\x00KI,I\x04\x00c' \
-        '\xf3\xf3\xad\x04\x00\x00\x00'
+                  '\xf3\xf3\xad\x04\x00\x00\x00'
+
+
+PROXY_SERVER_CONF = os.environ.get('SWIFT_PROXY_TEST_CONFIG_FILE',
+                                   '/etc/swift/proxy-server.conf')
 
 access_regex = '''
     ^
@@ -47,7 +46,7 @@ def mock_appconfig(*args, **kwargs):
     pass
 
 
-class MockInternalProxy():
+class MockInternalProxy(object):
 
     def __init__(self, *args, **kwargs):
         pass
@@ -105,11 +104,14 @@ class TestLogUploader(unittest.TestCase):
         with temptree(files, contents=[COMPRESSED_DATA] * len(files)) as t:
             # invalid pattern
             conf = {'log_dir': t,
+                    'proxy_server_conf': PROXY_SERVER_CONF,
                     'source_filename_pattern': '%Y%m%d%h'}  # should be %H
             uploader = MockLogUploader(conf)
             self.assertRaises(SystemExit, uploader.upload_all_logs)
 
-            conf = {'log_dir': t, 'source_filename_pattern': access_regex}
+            conf = {'log_dir': t,
+                    'proxy_server_conf': PROXY_SERVER_CONF,
+                    'source_filename_pattern': access_regex}
             uploader = ErrorLogUploader(conf)
             # this tests if the exception is handled
             uploader.upload_all_logs()
@@ -119,20 +121,24 @@ class TestLogUploader(unittest.TestCase):
         with temptree(files, contents=[COMPRESSED_DATA] * len(files)) as t:
             # invalid pattern
             conf = {'log_dir': t,
+                    'proxy_server_conf': PROXY_SERVER_CONF,
                     'source_filename_pattern': '%Y%m%d%h'}  # should be %H
             uploader = MockLogUploader(conf)
             self.assertRaises(SystemExit, uploader.upload_all_logs)
 
-            conf = {'log_dir': t, 'source_filename_pattern': access_regex}
+            conf = {'log_dir': t,
+                    'proxy_server_conf': PROXY_SERVER_CONF,
+                    'source_filename_pattern': access_regex}
             uploader = MockLogUploader(conf)
             uploader.upload_all_logs()
-            self.assertEquals(len(uploader.uploaded_files), 1)
+            self.assertEqual(len(uploader.uploaded_files), 1)
 
     def test_pattern_upload_all_logs(self):
 
         # test empty dir
         with temptree([]) as t:
-            conf = {'log_dir': t}
+            conf = {'log_dir': t,
+                    'proxy_server_conf': PROXY_SERVER_CONF}
             uploader = MockLogUploader(conf)
             self.assertRaises(SystemExit, uploader.run_once)
 
@@ -141,7 +147,7 @@ class TestLogUploader(unittest.TestCase):
                            range(random.randint(1, max_len)))
 
         template = 'prefix_%(random)s_%(digits)s.blah.' \
-                '%(datestr)s%(hour)0.2d00-%(next_hour)0.2d00-%(number)s.gz'
+                   '%(datestr)s%(hour)0.2d00-%(next_hour)0.2d00-%(number)s.gz'
         pattern = '''prefix_.*_[0-9]+\.blah\.
                      (?P<year>[0-9]{4})
                      (?P<month>[0-1][0-9])
@@ -175,42 +181,48 @@ class TestLogUploader(unittest.TestCase):
             files.append(fname)
 
         for fname in files:
-            print fname
+            print(fname)
 
         with temptree(files, contents=[COMPRESSED_DATA] * len(files)) as t:
-            self.assertEquals(len(os.listdir(t)), 48)
-            conf = {'source_filename_pattern': pattern, 'log_dir': t}
+            self.assertEqual(len(os.listdir(t)), 48)
+            conf = {'source_filename_pattern': pattern,
+                    'proxy_server_conf': PROXY_SERVER_CONF,
+                    'log_dir': t}
             uploader = MockLogUploader(conf)
             uploader.run_once()
-            self.assertEquals(len(os.listdir(t)), 24)
-            self.assertEquals(len(uploader.uploaded_files), 24)
+            self.assertEqual(len(os.listdir(t)), 24)
+            self.assertEqual(len(uploader.uploaded_files), 24)
             files_that_were_uploaded = set(x[0] for x in
                                            uploader.uploaded_files)
             for f in files_that_should_match:
-                self.assert_(os.path.join(t, f) in files_that_were_uploaded)
+                self.assertTrue(
+                    os.path.join(t, f) in files_that_were_uploaded)
 
     def test_log_cutoff(self):
         files = [datetime.now().strftime('%Y%m%d%H')]
         with temptree(files) as t:
             conf = {'log_dir': t, 'new_log_cutoff': '7200',
+                    'proxy_server_conf': PROXY_SERVER_CONF,
                     'source_filename_pattern': access_regex}
             uploader = MockLogUploader(conf)
             uploader.run_once()
-            self.assertEquals(len(uploader.uploaded_files), 0)
+            self.assertEqual(len(uploader.uploaded_files), 0)
             conf = {'log_dir': t, 'new_log_cutoff': '0',
+                    'proxy_server_conf': PROXY_SERVER_CONF,
                     'source_filename_pattern': access_regex}
             uploader = MockLogUploader(conf)
             uploader.run_once()
-            self.assertEquals(len(uploader.uploaded_files), 1)
+            self.assertEqual(len(uploader.uploaded_files), 1)
 
     def test_create_container_fail(self):
         files = [datetime.now().strftime('%Y%m%d%H')]
-        conf = {'source_filename_pattern': access_regex}
+        conf = {'source_filename_pattern': access_regex,
+                'proxy_server_conf': PROXY_SERVER_CONF}
         with temptree(files) as t:
             conf['log_dir'] = t
             uploader = MockLogUploader(conf)
             uploader.run_once()
-            self.assertEquals(len(uploader.uploaded_files), 1)
+            self.assertEqual(len(uploader.uploaded_files), 1)
 
         with temptree(files) as t:
             conf['log_dir'] = t
@@ -218,31 +230,34 @@ class TestLogUploader(unittest.TestCase):
             # mock create_container to fail
             uploader.internal_proxy.create_container = lambda *args: False
             uploader.run_once()
-            self.assertEquals(len(uploader.uploaded_files), 0)
+            self.assertEqual(len(uploader.uploaded_files), 0)
 
     def test_unlink_log(self):
         files = [datetime.now().strftime('%Y%m%d%H')]
         with temptree(files, contents=[COMPRESSED_DATA]) as t:
             conf = {'log_dir': t, 'unlink_log': 'false',
+                    'proxy_server_conf': PROXY_SERVER_CONF,
                     'source_filename_pattern': access_regex}
             uploader = MockLogUploader(conf)
             uploader.run_once()
-            self.assertEquals(len(uploader.uploaded_files), 1)
+            self.assertEqual(len(uploader.uploaded_files), 1)
             # file still there
-            self.assertEquals(len(os.listdir(t)), 1)
+            self.assertEqual(len(os.listdir(t)), 1)
 
             conf = {'log_dir': t, 'unlink_log': 'true',
+                    'proxy_server_conf': PROXY_SERVER_CONF,
                     'source_filename_pattern': access_regex}
             uploader = MockLogUploader(conf)
             uploader.run_once()
-            self.assertEquals(len(uploader.uploaded_files), 1)
+            self.assertEqual(len(uploader.uploaded_files), 1)
             # file gone
-            self.assertEquals(len(os.listdir(t)), 0)
+            self.assertEqual(len(os.listdir(t)), 0)
 
     def test_upload_file_failed(self):
         files = ['plugin-%s' % datetime.now().strftime('%Y%m%d%H')]
         with temptree(files, contents=[COMPRESSED_DATA]) as t:
             conf = {'log_dir': t, 'unlink_log': 'true',
+                    'proxy_server_conf': PROXY_SERVER_CONF,
                     'source_filename_pattern': access_regex}
             uploader = MockLogUploader(conf)
 
@@ -253,7 +268,7 @@ class TestLogUploader(unittest.TestCase):
             uploader.internal_proxy.upload_file = mock_upload_file
             self.assertRaises(SystemExit, uploader.run_once)
             # file still there
-            self.assertEquals(len(os.listdir(t)), 1)
+            self.assertEqual(len(os.listdir(t)), 1)
 
 
 if __name__ == '__main__':

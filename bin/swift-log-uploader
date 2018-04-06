@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 from optparse import OptionParser
 from slogging.log_uploader import LogUploader
-from swift.common.utils import parse_options
 from swift.common import utils
+from swift.common.utils import parse_options
+import sys
 
 if __name__ == '__main__':
     parser = OptionParser("Usage: %prog CONFIG_FILE PLUGIN")
@@ -30,7 +30,7 @@ if __name__ == '__main__':
     try:
         plugin = options['extra_args'][0]
     except (IndexError, KeyError):
-        print "Error: missing plugin name"
+        print("Error: missing plugin name")
         sys.exit(1)
 
     uploader_conf = utils.readconf(conf_file, 'log-processor')

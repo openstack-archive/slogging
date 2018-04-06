@@ -17,28 +17,30 @@ import pytz
 
 
 def get_time_zone(conf, logger, key, default):
-    """
-    Get and check time_zone value.
-    """
+    """Get and check time_zone value."""
     str_time_zone = conf.get(key, default)
     try:
         time_zone = pytz.timezone(str_time_zone)
     except pytz.exceptions.UnknownTimeZoneError:
-        logger.warning(
-            _("Invalid Parameter %s: %s, " % (key, str_time_zone) +
-              "use default %s.") % default)
+        msg = _("Invalid Parameter %(key)s: %(str_time_zone)s, "
+                "use default %(default)s.") % {'key': key,
+                                               'str_time_zone': str_time_zone,
+                                               'default': default}
+        logger.warning(msg)
         time_zone = pytz.timezone(default)
     return time_zone
 
 
 def get_format_type(conf, logger, key, default):
-    """
-    Get and check format_type value.
-    """
+    """Get and check format_type value."""
     format_type = conf.get(key, default).lower()
     if format_type not in ('json', 'csv'):
-        logger.warning(
-            _("Invalid Parameter %s: %s, " % (key, format_type) +
-              "use default %s.") % default)
+        # msg = _("Invalid Parameter %s: %s, " % (key, format_type) +
+        #         "use default %s.") % default
+        msg = _("Invalid Parameter %(key)s: %(format_type)s, "
+                "use default %(default)s.") % {'key': key,
+                                               'format_type': format_type,
+                                               'default': default}
+        logger.warning(msg)
         format_type = default
     return format_type

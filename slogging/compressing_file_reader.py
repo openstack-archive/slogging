@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import zlib
 import struct
+import zlib
 
 
 class CompressingFileReader(object):
-    '''
+    """CompressingFileReader class.
+
     Wraps a file object and provides a read method that returns gzip'd data.
 
     One warning: if read is called with a small value, the data returned may
@@ -35,8 +36,7 @@ class CompressingFileReader(object):
 
     :param file_obj: File object to read from
     :param compresslevel: compression level
-    '''
-
+    """
     def __init__(self, file_obj, compresslevel=9):
         self._f = file_obj
         self._compressor = zlib.compressobj(compresslevel,

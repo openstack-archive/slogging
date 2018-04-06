@@ -15,8 +15,8 @@
 
 """ Tests for swift.common.compressing_file_reader """
 
-import unittest
 import cStringIO
+import unittest
 
 from slogging.compressing_file_reader import CompressingFileReader
 
@@ -31,5 +31,5 @@ class TestCompressingFileReader(unittest.TestCase):
                    '\x00'
         x = CompressingFileReader(s)
         compressed = ''.join(iter(lambda: x.read(), ''))
-        self.assertEquals(compressed, expected)
-        self.assertEquals(x.read(), '')
+        self.assertEqual(compressed, expected)
+        self.assertEqual(x.read(), '')

@@ -14,35 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import setup, find_packages
+import setuptools
 
-from slogging import __version__ as version
+try:
+    import multiprocessing  # noqa
+except ImportError:
+    pass
 
 
-name = 'slogging'
-
-
-setup(
-    name=name,
-    version=version,
-    description='Slogging',
-    license='Apache License (2.0)',
-    author='OpenStack, LLC.',
-    author_email='me@not.mn',
-    url='https://github.com/notmyname/slogging',
-    packages=find_packages(exclude=['test_slogging', 'bin']),
-    test_suite='nose.collector',
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'License :: OSI Approved :: Apache Software License',
-        'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python :: 2.6',
-        'Environment :: No Input/Output (Daemon)',
-        ],
-    install_requires=[],  # removed for better compat
-    scripts=['bin/swift-account-stats-logger',
-             'bin/swift-container-stats-logger',
-             'bin/swift-log-stats-collector', 'bin/swift-log-uploader',
-             'bin/swift-access-log-delivery'
-        ],
-    )
+setuptools.setup(
+    setup_requires=['pbr'],
+    pbr=True,
+)

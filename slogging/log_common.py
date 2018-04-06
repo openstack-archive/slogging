@@ -13,27 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import multiprocessing
-import Queue
-from datetime import datetime, timedelta
-import zlib
-import time
-from paste.deploy import appconfig
-from contextlib import contextmanager
-import os
-import errno
-import fcntl
-import sys
-import traceback
 import cPickle
 import cStringIO
-
+from datetime import datetime
+from datetime import timedelta
 from eventlet import sleep
-
-from swift.common.memcached import MemcacheRing
+import multiprocessing
+from paste.deploy import appconfig
+import Queue
 from slogging.internal_proxy import InternalProxy
+from swift.common.exceptions import ChunkReadTimeout
+from swift.common.memcached import MemcacheRing
 from swift.common.utils import get_logger
-from swift.common.exceptions import ChunkReadTimeout, LockTimeout
+import sys
+import time
+import traceback
+import zlib
 
 
 class BadFileDownload(Exception):
@@ -54,8 +49,8 @@ class LogProcessorCommon(object):
             self.logger = get_logger(*logger, log_route=log_route)
         else:
             self.logger = logger
-        self.memcache = MemcacheRing([s.strip() for s in
-            conf.get('memcache_servers', '').split(',')
+        self.memcache = MemcacheRing([
+            s.strip() for s in conf.get('memcache_servers', '').split(',')
             if s.strip()])
         self.conf = conf
         self._internal_proxy = None
@@ -64,10 +59,10 @@ class LogProcessorCommon(object):
                                    self.lookback_hours))
         self.log_processor_account = conf['swift_account']
         self.log_processor_container = conf.get('container_name',
-                                            'simple_billing_data')
+                                                'simple_billing_data')
         self.processed_files_object_name = \
-                conf.get('processed_files_object_name',
-                        'processed_files.pickle.gz')
+            conf.get('processed_files_object_name',
+                     'processed_files.pickle.gz')
 
     @property
     def internal_proxy(self):
@@ -77,12 +72,12 @@ class LogProcessorCommon(object):
             if proxy_server_conf_loc is None:
                 # then look in a section called log-processor
                 stats_conf = self.conf.get('log-processor', {})
-                proxy_server_conf_loc = stats_conf.get('proxy_server_conf',
-                                                '/etc/swift/proxy-server.conf')
+                proxy_server_conf_loc = stats_conf.get(
+                    'proxy_server_conf', '/etc/swift/proxy-server.conf')
             if proxy_server_conf_loc:
                 proxy_server_conf = appconfig(
-                                        'config:%s' % proxy_server_conf_loc,
-                                        name='proxy-server')
+                    'config:%s' % proxy_server_conf_loc,
+                    name='proxy-server')
             else:
                 proxy_server_conf = None
             self._internal_proxy = InternalProxy(proxy_server_conf,
@@ -118,47 +113,46 @@ class LogProcessorCommon(object):
             # There is not a good way to determine when an old entry should be
             # pruned (lookback_hours could be set to anything and could change)
             processed_files_stream = self.get_object_data(
-                                        self.log_processor_account,
-                                        self.log_processor_container,
-                                        self.processed_files_object_name,
-                                        compressed=True)
+                self.log_processor_account,
+                self.log_processor_container,
+                self.processed_files_object_name,
+                compressed=True)
             buf = '\n'.join(x for x in processed_files_stream)
             if buf:
                 already_processed_files = cPickle.loads(buf)
             else:
                 already_processed_files = set()
-        except BadFileDownload, err:
+        except BadFileDownload as err:
             if err.status_code == 404:
                 already_processed_files = set()
             else:
                 self.logger.error(_('Simple billing unable to load list '
-                    'of already processed log files'))
+                                    'of already processed log files'))
                 return
-        self.logger.debug(_('found %d processed files') % \
+        self.logger.debug(_('found %d processed files') %
                           len(already_processed_files))
         return already_processed_files
 
     def save_processed_files(self, processed_files_data):
         s = cPickle.dumps(processed_files_data, cPickle.HIGHEST_PROTOCOL)
         f = cStringIO.StringIO(s)
-        return self.internal_proxy.upload_file(f, self.log_processor_account,
-                                            self.log_processor_container,
-                                            self.processed_files_object_name)
+        return self.internal_proxy.upload_file(
+            f,
+            self.log_processor_account,
+            self.log_processor_container,
+            self.processed_files_object_name)
 
     def get_object_data(self, swift_account, container_name, object_name,
                         compressed=False):
         '''reads an object and yields its lines'''
-        self.logger.debug('get_object_data(%r, %r, %r, compressed=%r)' %
-                                                        (swift_account,
-                                                        container_name,
-                                                        object_name,
-                                                        compressed))
+        self.logger.debug('get_object_data(%r, %r, %r, compressed=%r)' % (
+            swift_account, container_name, object_name, compressed))
         code, o = self.internal_proxy.get_object(swift_account, container_name,
                                                  object_name)
         if code < 200 or code >= 300:
             raise BadFileDownload(code)
         last_part = ''
-        last_compressed_part = ''
+
         # magic in the following zlib.decompressobj argument is courtesy of
         # Python decompressing gzip chunk-by-chunk
         # http://stackoverflow.com/questions/2423866
@@ -169,9 +163,10 @@ class LogProcessorCommon(object):
                     try:
                         chunk = d.decompress(chunk)
                     except zlib.error:
-                        self.logger.debug(_('Bad compressed data for %s')
-                            % '/'.join((swift_account, container_name,
-                                        object_name)))
+                        self.logger.debug(_('Bad compressed data for %s') %
+                                          '/'.join((swift_account,
+                                                    container_name,
+                                                    object_name)))
                         raise BadFileDownload()  # bad compressed data
                 parts = chunk.split('\n')
                 parts[0] = last_part + parts[0]
@@ -186,10 +181,13 @@ class LogProcessorCommon(object):
     def get_container_listing(self, swift_account, container_name,
                               start_date=None, end_date=None,
                               listing_filter=None):
-        '''
-        Get a container listing, filtered by start_date, end_date, and
-        listing_filter. Dates, if given, must be in YYYYMMDDHH format
-        '''
+        """Get a container listing.
+
+        Data can be filtered by start_date, end_date, and
+        listing_filter.
+
+        Dates, if given, must be in YYYYMMDDHH format.
+        """
         search_key = None
         if start_date is not None:
             try:
@@ -218,10 +216,10 @@ class LogProcessorCommon(object):
                 hour = '%02d' % (parsed_date.tm_hour + 1)
                 end_key = '/'.join([year, month, day, hour])
         container_listing = self.internal_proxy.get_container_list(
-                                    swift_account,
-                                    container_name,
-                                    marker=search_key,
-                                    end_marker=end_key)
+            swift_account,
+            container_name,
+            marker=search_key,
+            end_marker=end_key)
         results = []
         if listing_filter is None:
             listing_filter = set()
@@ -234,8 +232,6 @@ class LogProcessorCommon(object):
 
 def multiprocess_collate(processor_klass, processor_args, processor_method,
                          items_to_process, worker_count, logger=None):
-    '''
-    '''
     results = []
     in_queue = multiprocessing.Queue()
     out_queue = multiprocessing.Queue()
@@ -275,7 +271,7 @@ def multiprocess_collate(processor_klass, processor_args, processor_method,
 
 def collate_worker(processor_klass, processor_args, processor_method, in_queue,
                    out_queue, logger=None):
-    '''worker process for multiprocess_collate'''
+    """worker process for multiprocess_collate"""
     try:
         p = processor_klass(*processor_args)
         while True:
@@ -289,7 +285,7 @@ def collate_worker(processor_klass, processor_args, processor_method, in_queue,
                 return
             try:
                 ret = method(*item)
-            except:
+            except Exception:
                 err_type, err, tb = sys.exc_info()
                 # Use err_type since unplickling err in the parent process
                 # will fail if it has a custom constructor with required
@@ -297,7 +293,7 @@ def collate_worker(processor_klass, processor_args, processor_method, in_queue,
                 ret = WorkerError()
                 ret.tb_str = ''.join(traceback.format_tb(tb))
             out_queue.put((item, ret))
-    except Exception, err:
+    except Exception:
         if logger:
             logger.exception('Error in worker')
     finally:

@@ -13,39 +13,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: Tests
 
-import unittest
 from slogging import access_processor
+import unittest
 
 
 class TestAccessProcessor(unittest.TestCase):
 
     def test_CIDR_works(self):
         if access_processor.CIDR_support:
-            p = access_processor.AccessLogProcessor({'lb_private_ips':
-                                                    '127.0.0.1,192.168/16,10/24'})
+            p = access_processor.AccessLogProcessor({
+                'lb_private_ips': '127.0.0.1,192.168/16,10/24'})
             self.assertTrue('192.168.2.3' in p.lb_private_ips)
             self.assertTrue('127.0.0.1' in p.lb_private_ips)
             self.assertFalse('192.167.2.3' in p.lb_private_ips)
         else:
             from nose import SkipTest
-            raise SkipTest("iptools for CIDR support not installed") 
+            raise SkipTest("iptools for CIDR support not installed")
 
     def test_CIDR_process_logs_with_missing_ip(self):
         if access_processor.CIDR_support:
-            p = access_processor.AccessLogProcessor({'lb_private_ips':
-                                                    '127.0.0.1,192.168/16,10/24',
-                                                    'server_name':'testsrv'})
+            p = access_processor.AccessLogProcessor({
+                'lb_private_ips': '127.0.0.1,192.168/16,10/24',
+                'server_name': 'testsrv'})
             line = 'Sep 16 20:00:02 srv testsrv 199.115.119.21 - ' \
-                     '16/Sep/2012/20/00/02 GET /v1/a/c/o HTTP/1.0 '  \
-                     '200 - StaticWeb - - 17005 - txn - 0.0095 -'
+                   '16/Sep/2012/20/00/02 GET /v1/a/c/o HTTP/1.0 '  \
+                   '200 - StaticWeb - - 17005 - txn - 0.0095 -'
             stream = [line]
             res = p.process(stream, 'dao', 'dac', 'don')
-            self.assertEquals(res.keys()[0][0], 'a')
+            self.assertEqual(res.keys()[0][0], 'a')
         else:
             from nose import SkipTest
-            raise SkipTest("iptools for CIDR support not installed") 
+            raise SkipTest("iptools for CIDR support not installed")
 
     def test_log_line_parser_query_args(self):
         p = access_processor.AccessLogProcessor({})
@@ -70,9 +69,10 @@ class TestAccessProcessor(unittest.TestCase):
         for param in access_processor.LISTING_PARAMS:
             expected[param] = 1
         expected['query'] = query
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
 
-    def test_log_line_parser_query_args_with_slash_delimiter_to_container(self):
+    def test_log_line_parser_query_args_with_slash_delimiter_to_container(
+            self):
         p = access_processor.AccessLogProcessor({})
         log_line = [str(x) for x in range(18)]
         log_line[1] = 'proxy-server'
@@ -82,11 +82,11 @@ class TestAccessProcessor(unittest.TestCase):
         log_line = 'x' * 16 + ' '.join(log_line)
         res = p.log_line_parser(log_line)
 
-        self.assertEquals(res['object_name'], None)
-        self.assertEquals(res['container_name'], 'c')
-        self.assertEquals(res['account'], 'a')
-        self.assertEquals(res['request'], '/v1/a/c')
-        self.assertEquals(res['query'], query)
+        self.assertEqual(res['object_name'], None)
+        self.assertEqual(res['container_name'], 'c')
+        self.assertEqual(res['account'], 'a')
+        self.assertEqual(res['request'], '/v1/a/c')
+        self.assertEqual(res['query'], query)
 
     def test_log_line_parser_query_args_with_slash_delimiter_to_account(self):
         p = access_processor.AccessLogProcessor({})
@@ -98,11 +98,11 @@ class TestAccessProcessor(unittest.TestCase):
         log_line = 'x' * 16 + ' '.join(log_line)
         res = p.log_line_parser(log_line)
 
-        self.assertEquals(res['object_name'], None)
-        self.assertEquals(res['container_name'], None)
-        self.assertEquals(res['account'], 'a')
-        self.assertEquals(res['request'], '/v1/a')
-        self.assertEquals(res['query'], query)
+        self.assertEqual(res['object_name'], None)
+        self.assertEqual(res['container_name'], None)
+        self.assertEqual(res['account'], 'a')
+        self.assertEqual(res['request'], '/v1/a')
+        self.assertEqual(res['query'], query)
 
     def test_log_line_parser_field_count(self):
         p = access_processor.AccessLogProcessor({})
@@ -114,7 +114,7 @@ class TestAccessProcessor(unittest.TestCase):
         log_line = 'x' * 16 + ' '.join(log_line)
         res = p.log_line_parser(log_line)
         expected = {}
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
         # right amount of fields
         log_line = [str(x) for x in range(18)]
         log_line[1] = 'proxy-server'
@@ -131,7 +131,7 @@ class TestAccessProcessor(unittest.TestCase):
                     'referrer': '9', 'request': '/v1/a/c/o',
                     'user_agent': '10', 'bytes_in': 12, 'lb_ip': '3',
                     'log_source': None}
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
         # too many fields
         log_line = [str(x) for x in range(19)]
         log_line[1] = 'proxy-server'
@@ -148,7 +148,7 @@ class TestAccessProcessor(unittest.TestCase):
                     'referrer': '9', 'request': '/v1/a/c/o',
                     'user_agent': '10', 'bytes_in': 12, 'lb_ip': '3',
                     'log_source': '18'}
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
 
 
 if __name__ == '__main__':

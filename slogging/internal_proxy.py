@@ -13,13 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from urllib import quote, unquote
 from json import loads as json_loads
-import copy
-
 from slogging.compressing_file_reader import CompressingFileReader
-from swift.proxy.server import Application
 from swift.common import swob
+from swift.proxy.server import Application
+from urllib import quote
 
 
 def make_request_body_file(source_file, compress=True):
@@ -43,7 +41,8 @@ def swob_request_copy(orig_req, source_file=None, compress=True):
 
 
 class InternalProxy(object):
-    """
+    """Internal Proxy class.
+
     Set up a private instance of a proxy server that allows normal requests
     to be made without having to actually send the request to the proxy.
     This also doesn't log the requests to the normal proxy logs.
@@ -52,11 +51,11 @@ class InternalProxy(object):
     :param logger: logger to log requests to
     :param retries: number of times to retry each request
     """
-
     def __init__(self, proxy_server_conf=None, logger=None, retries=0,
                  memcache=None):
-        self.upload_app = Application(proxy_server_conf, memcache=memcache,
-                                          logger=logger)
+        self.upload_app = Application(proxy_server_conf,
+                                      memcache=memcache,
+                                      logger=logger)
         self.retries = retries
 
     def _handle_request(self, req, source_file=None, compress=True):
@@ -77,8 +76,7 @@ class InternalProxy(object):
     def upload_file(self, source_file, account, container, object_name,
                     compress=True, content_type='application/x-gzip',
                     etag=None, headers=None):
-        """
-        Upload a file to cloud files.
+        """Upload a file to cloud files.
 
         :param source_file: path to or file like object to upload
         :param account: account to upload to
@@ -101,8 +99,8 @@ class InternalProxy(object):
 
         # upload the file to the account
         req = swob.Request.blank(target_name,
-                            environ={'REQUEST_METHOD': 'PUT'},
-                            headers=send_headers)
+                                 environ={'REQUEST_METHOD': 'PUT'},
+                                 headers=send_headers)
         req.environ['content_type'] = content_type
         req.content_length = None   # to make sure we send chunked data
         if etag:
@@ -114,8 +112,7 @@ class InternalProxy(object):
         return True
 
     def get_object(self, account, container, object_name):
-        """
-        Get object.
+        """Get object.
 
         :param account: account name object is in
         :param container: container name object is in
@@ -123,29 +120,27 @@ class InternalProxy(object):
         :returns: iterator for object data
         """
         req = swob.Request.blank('/v1/%s/%s/%s' %
-                            (account, container, object_name),
-                            environ={'REQUEST_METHOD': 'GET'})
+                                 (account, container, object_name),
+                                 environ={'REQUEST_METHOD': 'GET'})
         resp = self._handle_request(req)
         return resp.status_int, resp.app_iter
 
     def create_container(self, account, container):
-        """
-        Create container.
+        """Create container.
 
         :param account: account name to put the container in
         :param container: container name to create
         :returns: True if successful, otherwise False
         """
         req = swob.Request.blank('/v1/%s/%s' % (account, container),
-                            environ={'REQUEST_METHOD': 'PUT'})
+                                 environ={'REQUEST_METHOD': 'PUT'})
         resp = self._handle_request(req)
         return 200 <= resp.status_int < 300
 
     def get_container_list(self, account, container, marker=None,
                            end_marker=None, limit=None, prefix=None,
                            delimiter=None, full_listing=True):
-        """
-        Get a listing of objects for the container.
+        """Get a listing of objects for the container.
 
         :param account: account name for the container
         :param container: container name to get a listing for
@@ -156,6 +151,7 @@ class InternalProxy(object):
         :param delimeter: string to delimit the queries on
         :param full_listing: if True, return a full listing, else returns a max
                              of 10000 listings
+
         :returns: list of objects
         """
         if full_listing:
@@ -190,7 +186,7 @@ class InternalProxy(object):
         req = swob.Request.blank(path, environ={'REQUEST_METHOD': 'GET'})
         resp = self._handle_request(req)
         if resp.status_int < 200 or resp.status_int >= 300:
-            return []  # TODO: distinguish between 404 and empty container
+            return []
         if resp.status_int == 204:
             return []
         return json_loads(resp.body)
@@ -200,7 +196,7 @@ class InternalProxy(object):
         req = swob.Request.blank(path, environ={'REQUEST_METHOD': 'HEAD'})
         resp = self._handle_request(req)
         out = {}
-        for k, v in resp.headers.iteritems():
+        for k, v in resp.headers.items():
             if k.lower().startswith('x-container-meta-'):
                 out[k] = v
         return out

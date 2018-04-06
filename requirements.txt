@@ -1,0 +1,4 @@
+pbr!=2.1.0,>=2.0.0 # Apache-2.0
+iptools>=0.4
+tzlocal
+swift>=2.14.0

@@ -1,8 +1,23 @@
-import unittest
+# Copyright (c) 2010-2011 OpenStack, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import Queue
 from slogging import log_common
-
 from slogging import log_processor
+from swift.common.exceptions import ChunkReadTimeout
+import unittest
 
 
 class DumbLogger(object):
@@ -58,14 +73,15 @@ class DumbInternalProxy(object):
 
 class TestLogProcessor(unittest.TestCase):
 
-    proxy_config = {'log-processor': {
-                    'swift_account': 'foo'}
-                   }
+    proxy_config = {
+        'log-processor': {
+            'swift_account': 'foo'
+        }}
     access_test_line = 'Jul  9 04:14:30 saio proxy-server 1.2.3.4 4.5.6.7 '\
-                    '09/Jul/2010/04/14/30 GET '\
-                    '/v1/acct/foo/bar?format=json&foo HTTP/1.0 200 - '\
-                    'curl tk4e350daf-9338-4cc6-aabb-090e49babfbd '\
-                    '6 95 - txfa431231-7f07-42fd-8fc7-7da9d8cc1f90 - 0.0262'
+                       '09/Jul/2010/04/14/30 GET '\
+                       '/v1/acct/foo/bar?format=json&foo HTTP/1.0 200 - '\
+                       'curl tk4e350daf-9338-4cc6-aabb-090e49babfbd '\
+                       '6 95 - txfa431231-7f07-42fd-8fc7-7da9d8cc1f90 - 0.0262'
 
     def test_collate_worker(self):
         try:
@@ -77,11 +93,12 @@ class TestLogProcessor(unittest.TestCase):
             log_processor.LogProcessor.get_object_data = get_object_data
             proxy_config = self.proxy_config.copy()
             proxy_config.update({
-                    'log-processor-access': {
-                        'source_filename_format': '%Y%m%d%H*',
-                        'class_path':
-                            'slogging.access_processor.AccessLogProcessor'
-                    }})
+                'log-processor-access': {
+                    'source_filename_format': '%Y%m%d%H*',
+                    'class_path':
+                        'slogging.access_processor.AccessLogProcessor',
+                    'time_zone': 'UTC',
+                }})
             processor_args = (proxy_config, DumbLogger())
             q_in = Queue.Queue()
             q_in.close = lambda: None
@@ -95,17 +112,18 @@ class TestLogProcessor(unittest.TestCase):
                                       'process_one_file', q_in, q_out,
                                       DumbLogger())
             item, ret = q_out.get()
-            self.assertEquals(item, work_request)
-            expected = {('acct', '2010', '07', '09', '04'):
-                        {('public', 'object', 'GET', '2xx'): 1,
-                        ('public', 'bytes_out'): 95,
-                        'marker_query': 0,
-                        'format_query': 1,
-                        'delimiter_query': 0,
-                        'path_query': 0,
-                        ('public', 'bytes_in'): 6,
-                        'prefix_query': 0}}
-            self.assertEquals(ret, expected)
+            self.assertEqual(item, work_request)
+            expected = {
+                ('acct', '2010', '07', '09', '04'):
+                    {('public', 'object', 'GET', '2xx'): 1,
+                     ('public', 'bytes_out'): 95,
+                     'marker_query': 0,
+                     'format_query': 1,
+                     'delimiter_query': 0,
+                     'path_query': 0,
+                     ('public', 'bytes_in'): 6,
+                     'prefix_query': 0}}
+            self.assertEqual(ret, expected)
         finally:
             log_processor.LogProcessor._internal_proxy = None
             log_processor.LogProcessor.get_object_data = orig_get_object_data
@@ -118,11 +136,12 @@ class TestLogProcessor(unittest.TestCase):
             log_processor.LogProcessor.get_object_data = get_object_data
             proxy_config = self.proxy_config.copy()
             proxy_config.update({
-                    'log-processor-access': {
-                        'source_filename_format': '%Y%m%d%H*',
-                        'class_path':
-                            'slogging.access_processor.AccessLogProcessor'
-                    }})
+                'log-processor-access': {
+                    'source_filename_format': '%Y%m%d%H*',
+                    'class_path':
+                        'slogging.access_processor.AccessLogProcessor',
+                    'time_zone': 'UTC',
+                }})
             processor_args = (proxy_config, DumbLogger())
             q_in = Queue.Queue()
             q_in.close = lambda: None
@@ -136,9 +155,9 @@ class TestLogProcessor(unittest.TestCase):
                                       'process_one_file', q_in, q_out,
                                       DumbLogger())
             item, ret = q_out.get()
-            self.assertEquals(item, work_request)
+            self.assertEqual(item, work_request)
             # these only work for Py2.7+
-            #self.assertIsInstance(ret, log_common.BadFileDownload)
+            # self.assertIsInstance(ret, log_common.BadFileDownload)
             self.assertTrue(isinstance(ret, Exception))
         finally:
             log_processor.LogProcessor.get_object_data = orig_get_object_data
@@ -153,32 +172,35 @@ class TestLogProcessor(unittest.TestCase):
             log_processor.LogProcessor.get_object_data = get_object_data
             proxy_config = self.proxy_config.copy()
             proxy_config.update({
-                    'log-processor-access': {
-                        'source_filename_format': '%Y%m%d%H*',
-                        'class_path':
-                            'slogging.access_processor.AccessLogProcessor'
-                    }})
+                'log-processor-access': {
+                    'source_filename_format': '%Y%m%d%H*',
+                    'class_path':
+                        'slogging.access_processor.AccessLogProcessor',
+                    'time_zone': 'UTC',
+                }})
             processor_args = (proxy_config, DumbLogger())
             item = ('access', 'a', 'c', 'o')
             logs_to_process = [item]
             processor_klass = log_processor.LogProcessor
-            results = log_processor.multiprocess_collate(processor_klass,
-                                                         processor_args,
-                                                         'process_one_file',
-                                                         logs_to_process,
-                                                         1,
-                                                         DumbLogger())
+            results = log_common.multiprocess_collate(
+                processor_klass,
+                processor_args,
+                'process_one_file',
+                logs_to_process,
+                1,
+                DumbLogger())
             results = list(results)
             expected = [(item, {('acct', '2010', '07', '09', '04'):
-                        {('public', 'object', 'GET', '2xx'): 1,
-                        ('public', 'bytes_out'): 95,
-                        'marker_query': 0,
-                        'format_query': 1,
-                        'delimiter_query': 0,
-                        'path_query': 0,
-                        ('public', 'bytes_in'): 6,
-                        'prefix_query': 0}})]
-            self.assertEquals(results, expected)
+                        {
+                            ('public', 'object', 'GET', '2xx'): 1,
+                            ('public', 'bytes_out'): 95,
+                            'marker_query': 0,
+                            'format_query': 1,
+                            'delimiter_query': 0,
+                            'path_query': 0,
+                            ('public', 'bytes_in'): 6,
+                            'prefix_query': 0}})]
+            self.assertEqual(results, expected)
         finally:
             log_processor.LogProcessor._internal_proxy = None
             log_processor.LogProcessor.get_object_data = orig_get_object_data
@@ -191,11 +213,12 @@ class TestLogProcessor(unittest.TestCase):
             log_processor.LogProcessor.get_object_data = get_object_data
             proxy_config = self.proxy_config.copy()
             proxy_config.update({
-                    'log-processor-access': {
-                        'source_filename_format': '%Y%m%d%H*',
-                        'class_path':
-                            'slogging.access_processor.AccessLogProcessor'
-                    }})
+                'log-processor-access': {
+                    'source_filename_format': '%Y%m%d%H*',
+                    'class_path':
+                        'slogging.access_processor.AccessLogProcessor',
+                    'time_zone': 'UTC',
+                }})
             processor_args = (proxy_config, DumbLogger())
             item = ('access', 'a', 'c', 'o')
             logs_to_process = [item]
@@ -208,7 +231,7 @@ class TestLogProcessor(unittest.TestCase):
                                                       DumbLogger())
             results = list(results)
             expected = []
-            self.assertEquals(results, expected)
+            self.assertEqual(results, expected)
         finally:
             log_processor.LogProcessor._internal_proxy = None
             log_processor.LogProcessor.get_object_data = orig_get_object_data

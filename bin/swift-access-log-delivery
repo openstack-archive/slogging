@@ -15,8 +15,8 @@
 # limitations under the License.
 
 from slogging.access_log_delivery import AccessLogDeliveryDaemon
-from swift.common.utils import parse_options
 from swift.common.daemon import run_daemon
+from swift.common.utils import parse_options
 
 if __name__ == '__main__':
     conf_file, options = parse_options(once=True)

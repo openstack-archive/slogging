@@ -14,25 +14,25 @@
 # limitations under the License.
 
 
-import unittest
 import os
-import time
-import uuid
-import sqlite3
 from shutil import rmtree
 from slogging import db_stats_collector
-from tempfile import mkdtemp
-from test_slogging.unit import FakeLogger
+import sqlite3
 from swift.account.backend import AccountBroker
-from swift.container.backend import ContainerBroker
 from swift.common.utils import mkdirs
+from swift.container.backend import ContainerBroker
+from tempfile import mkdtemp
+from test.unit import FakeLogger
+import time
+import unittest
+import uuid
 
 
 class TestDbStats(unittest.TestCase):
 
     def setUp(self):
-        self._was_logger = db_stats_collector.get_logger
-        db_stats_collector.get_logger = FakeLogger
+        self._was_logger = db_stats_collector.utils.get_logger
+        db_stats_collector.utils.get_logger = FakeLogger
         self.testdir = os.path.join(mkdtemp(), 'tmp_test_db_stats')
         self.devices = os.path.join(self.testdir, 'node')
         rmtree(self.testdir, ignore_errors=1)
@@ -46,49 +46,25 @@ class TestDbStats(unittest.TestCase):
                          mount_check='false')
 
     def tearDown(self):
-        db_stats_collector.get_logger = self._was_logger
+        db_stats_collector.utils.get_logger = self._was_logger
         rmtree(self.testdir)
-
-    def test_account_stat_get_data(self):
-        stat = db_stats_collector.AccountStatsCollector(self.conf)
-        account_db = AccountBroker("%s/acc.db" % self.accounts,
-                                        account='test_acc')
-        account_db.initialize()
-        account_db.put_container('test_container', time.time(),
-                                      None, 10, 1000, 1)
-        info = stat.get_data("%s/acc.db" % self.accounts)
-        self.assertEquals('''"test_acc",1,10,1000\n''', info)
-
-    def test_container_stat_get_data(self):
-        stat = db_stats_collector.ContainerStatsCollector(self.conf)
-        container_db = ContainerBroker("%s/con.db" % self.containers,
-                                     account='test_acc', container='test_con')
-        container_db.initialize(storage_policy_index=0)
-        container_db.put_object('test_obj', time.time(), 10, 'text', 'faketag')
-        info = stat.get_data("%s/con.db" % self.containers)
-        self.assertEquals('''"test_acc","test_con",1,10\n''', info)
-
-    def test_container_stat_get_metadata(self):
-        container_db = ContainerBroker("%s/con.db" % self.containers,
-                                     account='test_acc', container='test_con')
-        container_db.initialize(storage_policy_index=0)
-        container_db.put_object('test_obj', time.time(), 10, 'text', 'faketag')
-        container_db.update_metadata({'X-Container-Meta-Test1': ('val', 1000)})
-        self.conf['metadata_keys'] = 'test1,test2'
-        stat = db_stats_collector.ContainerStatsCollector(self.conf)
-        info = stat.get_data("%s/con.db" % self.containers)
-        self.assertEquals('''"test_acc","test_con",1,10,1,\n''', info)
 
     def _gen_account_stat(self):
         stat = db_stats_collector.AccountStatsCollector(self.conf)
         output_data = set()
         for i in range(10):
-            account_db = AccountBroker("%s/stats-201001010%s-%s.db" %
-                                       (self.accounts, i, uuid.uuid4().hex),
-                                        account='test_acc_%s' % i)
+            account_db = AccountBroker(
+                "%s/stats-201001010%s-%s.db" % (self.accounts,
+                                                i,
+                                                uuid.uuid4().hex),
+                account='test_acc_%s' % i)
             account_db.initialize()
-            account_db.put_container('test_container', time.time(),
-                                      None, 10, 1000, 1)
+            account_db.put_container(name='test_container',
+                                     put_timestamp=time.time(),
+                                     delete_timestamp=0,
+                                     object_count=10,
+                                     bytes_used=1000,
+                                     storage_policy_index=1)
             # this will "commit" the data
             account_db.get_info()
             output_data.add('''"test_acc_%s",1,10,1000''' % i),
@@ -104,9 +80,10 @@ class TestDbStats(unittest.TestCase):
         output_data = set()
         for i in range(10):
             cont_db = ContainerBroker(
-                "%s/container-stats-201001010%s-%s.db" % (self.containers, i,
+                "%s/container-stats-201001010%s-%s.db" % (self.containers,
+                                                          i,
                                                           uuid.uuid4().hex),
-                 account='test_acc_%s' % i, container='test_con')
+                account='test_acc_%s' % i, container='test_con')
             cont_db.initialize(storage_policy_index=0)
             cont_db.put_object('test_obj', time.time(), 10, 'text', 'faketag')
             metadata_output = ''
@@ -125,6 +102,50 @@ class TestDbStats(unittest.TestCase):
         self.assertEqual(len(output_data), 10)
         return stat, output_data
 
+    def test_account_stat_get_data(self):
+        stat = db_stats_collector.AccountStatsCollector(self.conf)
+        account_db = AccountBroker("%s/acc.db" % self.accounts,
+                                   account='test_acc')
+        account_db.initialize()
+        account_db.put_container(name='test_container',
+                                 put_timestamp=time.time(),
+                                 delete_timestamp=0,
+                                 object_count=10,
+                                 bytes_used=1000,
+                                 storage_policy_index=1)
+        info = stat.get_data("%s/acc.db" % self.accounts)
+        self.assertEqual('''"test_acc",1,10,1000\n''', info)
+
+    def test_container_stat_get_data(self):
+        stat = db_stats_collector.ContainerStatsCollector(self.conf)
+        container_db = ContainerBroker("%s/con.db" % self.containers,
+                                       account='test_acc',
+                                       container='test_con')
+        container_db.initialize(storage_policy_index=0)
+        container_db.put_object(name='test_obj',
+                                timestamp=time.time(),
+                                size=10,
+                                content_type='text',
+                                etag='faketag')
+        info = stat.get_data("%s/con.db" % self.containers)
+        self.assertEqual('''"test_acc","test_con",1,10\n''', info)
+
+    def test_container_stat_get_metadata(self):
+        container_db = ContainerBroker("%s/con.db" % self.containers,
+                                       account='test_acc',
+                                       container='test_con')
+        container_db.initialize(storage_policy_index=0)
+        container_db.put_object(name='test_obj',
+                                timestamp=time.time(),
+                                size=10,
+                                content_type='text',
+                                etag='faketag')
+        container_db.update_metadata({'X-Container-Meta-Test1': ('val', 1000)})
+        self.conf['metadata_keys'] = 'test1,test2'
+        stat = db_stats_collector.ContainerStatsCollector(self.conf)
+        info = stat.get_data("%s/con.db" % self.containers)
+        self.assertEqual('''"test_acc","test_con",1,10,1,\n''', info)
+
     def test_account_stat_run_once_account(self):
         stat, output_data = self._gen_account_stat()
         stat.run_once()
@@ -142,7 +163,7 @@ class TestDbStats(unittest.TestCase):
         def raise_error(path):
             raise sqlite3.OperationalError('Test error')
         stat.get_data = raise_error
-        was_errors = len(stat.logger.log_dict['info'])
+        len(stat.logger.log_dict['info'])
         stat.run_once()
 
     def test_account_stat_run_once_container_metadata(self):
@@ -152,7 +173,7 @@ class TestDbStats(unittest.TestCase):
         stat_file = os.listdir(self.log_dir)[0]
         with open(os.path.join(self.log_dir, stat_file)) as stat_handle:
             headers = stat_handle.readline()
-            self.assert_(headers.startswith('Account Hash,Container Name,'))
+            self.assertTrue(headers.startswith('Account Hash,Container Name,'))
             for i in range(10):
                 data = stat_handle.readline()
                 output_data.discard(data.strip())
@@ -176,7 +197,7 @@ class TestDbStats(unittest.TestCase):
         stat_file = [f for f in os.listdir(self.log_dir) if f != stat_file][0]
         with open(os.path.join(self.log_dir, stat_file)) as stat_handle:
             headers = stat_handle.readline()
-            self.assert_(headers.startswith('Account Hash,Container Name,'))
+            self.assertTrue(headers.startswith('Account Hash,Container Name,'))
             for i in range(10):
                 data = stat_handle.readline()
                 con_output_data.discard(data.strip())
@@ -187,11 +208,11 @@ class TestDbStats(unittest.TestCase):
         stat, output_data = self._gen_account_stat()
         rmtree(self.accounts)
         stat.run_once()
-        self.assertEquals(len(stat.logger.log_dict['debug']), 1)
+        self.assertEqual(len(stat.logger.log_dict['debug']), 1)
 
     def test_not_implemented(self):
-        db_stat = db_stats_collector.DatabaseStatsCollector(self.conf,
-                                     'account', 'test_dir', 'stats-%Y%m%d%H_')
+        db_stat = db_stats_collector.DatabaseStatsCollector(
+            self.conf, 'account', 'test_dir', 'stats-%Y%m%d%H_')
         self.assertRaises(NotImplementedError, db_stat.get_data)
         self.assertRaises(NotImplementedError, db_stat.get_header)
 
@@ -199,7 +220,7 @@ class TestDbStats(unittest.TestCase):
         self.conf['mount_check'] = 'true'
         stat, output_data = self._gen_account_stat()
         stat.run_once()
-        self.assertEquals(len(stat.logger.log_dict['error']), 1)
+        self.assertEqual(len(stat.logger.log_dict['error']), 1)
 
 if __name__ == '__main__':
     unittest.main()

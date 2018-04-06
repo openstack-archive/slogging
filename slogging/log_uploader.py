@@ -14,25 +14,27 @@
 # limitations under the License.
 
 from __future__ import with_statement
-import os
-import hashlib
-import time
 import gzip
+import hashlib
+import os
+from paste.deploy import appconfig
+from paste.deploy import loadfilter
 import re
-import sys
-from paste.deploy import appconfig, loadfilter
-import zlib
-
 from slogging.internal_proxy import InternalProxy
 from swift.common.daemon import Daemon
 from swift.common import utils
+import sys
+import time
 
 
 class LogUploader(Daemon):
-    '''
-    Given a local directory, a swift account, and a container name, LogParser
-    will upload all files in the local directory to the given account/
-    container.  All but the newest files will be uploaded, and the files' md5
+    """LogUploader class.
+
+    Given a local directory, a swift account, and a container name,
+
+    LogParser will upload all files in the local directory to the given
+    account/container.
+    All but the newest files will be uploaded, and the files' md5
     sum will be computed. The hash is used to prevent duplicate data from
     being uploaded multiple times in different files (ex: log lines). Since
     the hash is computed, it is also used as the uploaded object's etag to
@@ -53,8 +55,7 @@ class LogUploader(Daemon):
         (?P<day>[0-3][0-9])
         (?P<hour>[0-2][0-9])
         .*$
-    '''
-
+    """
     def __init__(self, uploader_conf, plugin_name, regex=None, cutoff=None):
         super(LogUploader, self).__init__(uploader_conf)
         log_name = '%s-log-uploader' % plugin_name
@@ -63,8 +64,8 @@ class LogUploader(Daemon):
         self.log_dir = uploader_conf.get('log_dir', '/var/log/swift/')
         self.swift_account = uploader_conf['swift_account']
         self.container_name = uploader_conf['container_name']
-        proxy_server_conf_loc = uploader_conf.get('proxy_server_conf',
-                                            '/etc/swift/proxy-server.conf')
+        proxy_server_conf_loc = uploader_conf.get(
+            'proxy_server_conf', '/etc/swift/proxy-server.conf')
         proxy_server_conf = appconfig('config:%s' % proxy_server_conf_loc,
                                       name='proxy-server')
         memcache = loadfilter('config:%s' % proxy_server_conf_loc,
@@ -73,10 +74,12 @@ class LogUploader(Daemon):
                                             memcache=memcache)
         self.new_log_cutoff = int(cutoff or
                                   uploader_conf.get('new_log_cutoff', '7200'))
-        self.unlink_log = uploader_conf.get('unlink_log', 'true').lower() in \
-                utils.TRUE_VALUES
+        self.unlink_log = \
+            uploader_conf.get('unlink_log',
+                              'true').lower() in utils.TRUE_VALUES
         self.filename_pattern = regex or \
-            uploader_conf.get('source_filename_pattern',
+            uploader_conf.get(
+                'source_filename_pattern',
                 '''
                 ^%s-
                 (?P<year>[0-9]{4})
@@ -91,11 +94,10 @@ class LogUploader(Daemon):
         start = time.time()
         self.upload_all_logs()
         self.logger.info(_("Uploading logs complete (%0.2f minutes)") %
-            ((time.time() - start) / 60))
+                         ((time.time() - start) / 60))
 
     def get_relpath_to_files_under_log_dir(self):
-        """
-        Look under log_dir recursively and return all filenames as relpaths
+        """Look under log_dir recursively and return all filenames as relpaths
 
         :returns : list of strs, the relpath to all filenames under log_dir
         """
@@ -105,39 +107,36 @@ class LogUploader(Daemon):
         return [os.path.relpath(f, start=self.log_dir) for f in all_files]
 
     def filter_files(self, all_files):
-        """
-        Filter files based on regex pattern
+        """Filter files based on regex pattern.
 
         :param all_files: list of strs, relpath of the filenames under log_dir
         :param pattern: regex pattern to match against filenames
-
         :returns : dict mapping full path of file to match group dict
         """
         filename2match = {}
-        found_match = False
         for filename in all_files:
             match = re.match(self.filename_pattern, filename, re.VERBOSE)
             if match:
-                found_match = True
                 full_path = os.path.join(self.log_dir, filename)
                 filename2match[full_path] = match.groupdict()
             else:
                 self.logger.debug(_('%(filename)s does not match '
-                           '%(pattern)s') % {'filename': filename,
-                                             'pattern': self.filename_pattern})
+                                    '%(pattern)s') %
+                                  {'filename': filename,
+                                   'pattern': self.filename_pattern})
         return filename2match
 
     def upload_all_logs(self):
-        """
-        Match files under log_dir to source_filename_pattern and upload to
-        swift
+        """Match files under log_dir to source_filename_pattern.
+
+         And upload to swift
         """
         all_files = self.get_relpath_to_files_under_log_dir()
         filename2match = self.filter_files(all_files)
         if not filename2match:
             self.logger.error(_('No files in %(log_dir)s match %(pattern)s') %
-                     {'log_dir': self.log_dir,
-                      'pattern': self.filename_pattern})
+                              {'log_dir': self.log_dir,
+                               'pattern': self.filename_pattern})
             sys.exit(1)
         if not self.internal_proxy.create_container(self.swift_account,
                                                     self.container_name):
@@ -166,9 +165,7 @@ class LogUploader(Daemon):
                     _('ERROR: could not upload %s') % filename)
 
     def upload_one_log(self, filename, year, month, day, hour):
-        """
-        Upload one file to swift
-        """
+        """Upload one file to swift"""
         if os.path.getsize(filename) == 0:
             self.logger.debug(_("Log %s is 0 length, skipping") % filename)
             return
@@ -192,13 +189,13 @@ class LogUploader(Daemon):
         if self.content_type:
             metadata['Content-Type'] = self.content_type
         if self.internal_proxy.upload_file(filename,
-                                          self.swift_account,
-                                          self.container_name,
-                                          target_filename,
-                                          compress=(not already_compressed),
-                                          headers=metadata):
+                                           self.swift_account,
+                                           self.container_name,
+                                           target_filename,
+                                           compress=(not already_compressed),
+                                           headers=metadata):
             self.logger.debug(_("Uploaded log %(file)s to %(target)s") %
-                {'file': filename, 'target': target_filename})
+                              {'file': filename, 'target': target_filename})
             if self.unlink_log:
                 os.unlink(filename)
         else:

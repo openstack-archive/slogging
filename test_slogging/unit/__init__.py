@@ -1,25 +1,36 @@
-""" Swift tests """
+# Copyright (c) 2010-2011 OpenStack, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-import sys
-import os
-import copy
-import logging
-from sys import exc_info
+
 from contextlib import contextmanager
-from tempfile import NamedTemporaryFile
+import copy
 from eventlet.green import socket
-from tempfile import mkdtemp
-from shutil import rmtree
-from ConfigParser import MissingSectionHeaderError
-from StringIO import StringIO
-from swift.common.utils import readconf, TRUE_VALUES
-from logging import Handler
+import logging
 import logging.handlers
+import os
+from shutil import rmtree
+from swift.common.utils import readconf
+from swift.common.utils import TRUE_VALUES
+import sys
+from sys import exc_info
+from tempfile import mkdtemp
+from tempfile import NamedTemporaryFile
 
 
 def get_config(section_name=None, defaults=None):
-    """
-    Attempt to get a test config dictionary.
+    """Attempt to get a test config dictionary.
 
     :param section_name: the section to read (all sections if not defined)
     :param defaults: an optional dictionary namespace of defaults
@@ -34,17 +45,17 @@ def get_config(section_name=None, defaults=None):
         config = readconf(config_file, section_name)
     except SystemExit:
         if not os.path.exists(config_file):
-            print >>sys.stderr, \
-                'Unable to read test config %s - file not found' \
-                % config_file
+            msg = 'Unable to read test config ' \
+                  '%s - file not found\n' % config_file
         elif not os.access(config_file, os.R_OK):
-            print >>sys.stderr, \
-                'Unable to read test config %s - permission denied' \
-                % config_file
+            msg = 'Unable to read test config %s - ' \
+                  'permission denied' % config_file
         else:
-            print >>sys.stderr, \
-                'Unable to read test config %s - section %s not found' \
-                % (config_file, section_name)
+            values = {'config_file': config_file,
+                      'section_name': section_name}
+            msg = 'Unable to read test config %(config_file)s - ' \
+                  'section %(section_name)s not found' % values
+        sys.stderr.write(msg)
     return config
 
 
@@ -169,8 +180,8 @@ class FakeLogger(object):
     def set_statsd_prefix(self, *a, **kw):
         pass
 
-    increment = decrement = timing = timing_since = update_stats = \
-            set_statsd_prefix
+    increment = decrement = timing = \
+        timing_since = update_stats = set_statsd_prefix
 
     def setFormatter(self, obj):
         self.formatter = obj
@@ -223,8 +234,8 @@ if get_config('unit_test').get('fake_syslog', 'False').lower() in TRUE_VALUES:
 
 
 class MockTrue(object):
-    """
-    Instances of MockTrue evaluate like True
+    """Instances of MockTrue evaluate like True
+
     Any attr accessed on an instance of MockTrue will return a MockTrue
     instance. Any method called on an instance of MockTrue will return
     a MockTrue instance.
@@ -248,9 +259,7 @@ class MockTrue(object):
     True
     >>> thing.method().attribute
     True
-
     """
-
     def __getattribute__(self, *args, **kwargs):
         return self
 

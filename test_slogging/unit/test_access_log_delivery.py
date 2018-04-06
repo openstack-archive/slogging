@@ -13,16 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: Tests
 
-import unittest
 from contextlib import contextmanager
-
-from test_slogging.unit import temptree
-from swift.common import utils
-from slogging import access_log_delivery
-
 from nose.tools import nottest
+from slogging import access_log_delivery
+from swift.common import utils
+from test.unit import temptree
+import unittest
 
 
 class DumbLogger(object):
@@ -88,7 +85,7 @@ class TestAccessLogDelivery(unittest.TestCase):
                     'minute': '5', 'account': 'a', 'hour': '4',
                     'referrer': '9', 'request': '/v1/a/c/o?foo',
                     'user_agent': '10', 'bytes_in': 12, 'lb_ip': '3'}
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
 
     def test_log_line_parser_hidden_ip(self):
         conf = {'hidden_ips': '1.2.3.4', 'swift_account': 'foo',
@@ -102,7 +99,7 @@ class TestAccessLogDelivery(unittest.TestCase):
         log_line = 'x' * 16 + ' '.join(log_line)
         res = p.log_line_parser(log_line)
         expected = '0.0.0.0'
-        self.assertEquals(res['client_ip'], expected)
+        self.assertEqual(res['client_ip'], expected)
         log_line = [str(x) for x in range(18)]
         log_line[1] = 'proxy-server'
         log_line[2] = '4.3.2.1'
@@ -111,7 +108,7 @@ class TestAccessLogDelivery(unittest.TestCase):
         log_line = 'x' * 16 + ' '.join(log_line)
         res = p.log_line_parser(log_line)
         expected = '4.3.2.1'
-        self.assertEquals(res['client_ip'], expected)
+        self.assertEqual(res['client_ip'], expected)
 
     def test_log_line_parser_field_count(self):
         p = access_log_delivery.AccessLogDelivery(self.conf, DumbLogger())
@@ -123,7 +120,7 @@ class TestAccessLogDelivery(unittest.TestCase):
         log_line = 'x' * 16 + ' '.join(log_line)
         res = p.log_line_parser(log_line)
         expected = {}
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
         # right amount of fields
         log_line = [str(x) for x in range(18)]
         log_line[1] = 'proxy-server'
@@ -139,7 +136,7 @@ class TestAccessLogDelivery(unittest.TestCase):
                     'minute': '5', 'account': 'a', 'hour': '4',
                     'referrer': '9', 'request': '/v1/a/c/o',
                     'user_agent': '10', 'bytes_in': 12, 'lb_ip': '3'}
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
         # too many fields
         log_line = [str(x) for x in range(19)]
         log_line[1] = 'proxy-server'
@@ -148,7 +145,7 @@ class TestAccessLogDelivery(unittest.TestCase):
         log_line = 'x' * 16 + ' '.join(log_line)
         res = p.log_line_parser(log_line)
         # throws away invalid log lines
-        self.assertEquals(res, {})
+        self.assertEqual(res, {})
 
     def test_make_clf_from_parts(self):
         p = access_log_delivery.AccessLogDelivery(self.conf, DumbLogger())
@@ -160,7 +157,7 @@ class TestAccessLogDelivery(unittest.TestCase):
         parts = p.log_line_parser(log_line)
         clf = access_log_delivery.make_clf_from_parts(parts)
         expect = '2 - - [1/01/3:4:5:6 +0000] "5 /v1/a/c/o?foo 7" 8 13 "9" "10"'
-        self.assertEquals(clf, expect)
+        self.assertEqual(clf, expect)
 
     def test_convert_log_line(self):
         p = access_log_delivery.AccessLogDelivery(self.conf, DumbLogger())
@@ -174,7 +171,7 @@ class TestAccessLogDelivery(unittest.TestCase):
             '2 - - [1/01/3:4:5:6 +0000] "5 /v1/a/c/o?foo 7" 8 13 "9" "10"',
             'a',
             'c')
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
 
     # the following test fails, as it tries to load in /etc/swift/swift.conf
     @nottest
@@ -193,17 +190,17 @@ class TestAccessLogDelivery(unittest.TestCase):
         p.memcache = FakeMemcache()
         res = p.get_container_save_log_flag('a', 'c1')
         expected = False
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
         p.internal_proxy.get_container_metadata = my_get_metadata_true
         p.memcache = FakeMemcache()
         res = p.get_container_save_log_flag('a', 'c2')
         expected = True
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
         p.internal_proxy.get_container_metadata = my_get_metadata_true_upper
         p.memcache = FakeMemcache()
         res = p.get_container_save_log_flag('a', 'c3')
         expected = True
-        self.assertEquals(res, expected)
+        self.assertEqual(res, expected)
 
     def test_process_one_file(self):
         with temptree([]) as t:
@@ -212,7 +209,6 @@ class TestAccessLogDelivery(unittest.TestCase):
             p = access_log_delivery.AccessLogDelivery(conf, DumbLogger())
 
             def my_get_object_data(*a, **kw):
-                all_lines = []
                 log_line = [str(x) for x in range(18)]
                 log_line[1] = 'proxy-server'
                 log_line[4] = '1/Jan/3/4/5/6'
@@ -238,16 +234,16 @@ class TestAccessLogDelivery(unittest.TestCase):
             res = p.process_one_file('a', 'c', '2011/03/14/12/hash')
             expected = ['%s/a2/c2/2011/03/14/12' % t,
                         '%s/a/c/2011/03/14/12' % t]
-            self.assertEquals(res, set(expected))
+            self.assertEqual(res, set(expected))
             lines = [p.convert_log_line(x)[0] for x in my_get_object_data()]
             with open(expected[0], 'rb') as f:
                 raw = f.read()
                 res = '\n'.join(lines[2:]) + '\n'
-                self.assertEquals(res, raw)
+                self.assertEqual(res, raw)
             with open(expected[1], 'rb') as f:
                 raw = f.read()
                 res = '\n'.join(lines[:2]) + '\n'
-                self.assertEquals(res, raw)
+                self.assertEqual(res, raw)
 
 
 if __name__ == '__main__':

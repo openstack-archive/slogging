@@ -17,14 +17,16 @@ from swift.common.utils import get_logger
 
 
 class StatsLogProcessor(object):
-    """Transform account storage stat logs"""
+    """StatsLogProcessor class.
 
+    Transform account storage stat logs
+    """
     def __init__(self, conf):
         self.logger = get_logger(conf, log_route='stats-processor')
 
     def process(self, obj_stream, data_object_account, data_object_container,
                 data_object_name):
-        '''generate hourly groupings of data from one stats log file'''
+        """generate hourly groupings of data from one stats log file"""
         account_totals = {}
         year, month, day, hour, _junk = data_object_name.split('/')
         for line in obj_stream:
@@ -32,9 +34,9 @@ class StatsLogProcessor(object):
                 continue
             try:
                 (account,
-                container_count,
-                object_count,
-                bytes_used) = line.split(',')[:4]
+                 container_count,
+                 object_count,
+                 bytes_used) = line.split(',')[:4]
                 account = account.strip('"')
                 container_count = int(container_count.strip('"'))
                 object_count = int(object_count.strip('"'))
@@ -46,21 +48,17 @@ class StatsLogProcessor(object):
             aggr_key = (account, year, month, day, hour)
             d = account_totals.get(aggr_key, {})
             d['replica_count'] = d.setdefault('replica_count', 0) + 1
-            d['container_count'] = d.setdefault('container_count', 0) + \
-                                   container_count
-            d['object_count'] = d.setdefault('object_count', 0) + \
-                                object_count
-            d['bytes_used'] = d.setdefault('bytes_used', 0) + \
-                              bytes_used
+            d['container_count'] = \
+                d.setdefault('container_count', 0) + container_count
+            d['object_count'] = d.setdefault('object_count', 0) + object_count
+            d['bytes_used'] = d.setdefault('bytes_used', 0) + bytes_used
             account_totals[aggr_key] = d
         return account_totals
 
     def keylist_mapping(self):
-        '''
-        returns a dictionary of final keys mapped to source keys
-        '''
+        """Returns a dictionary of final keys mapped to source keys"""
         keylist_mapping = {
-        #   <db key> : <row key> or <set of row keys>
+            # <db key> : <row key> or <set of row keys>
             'bytes_used': 'bytes_used',
             'container_count': 'container_count',
             'object_count': 'object_count',

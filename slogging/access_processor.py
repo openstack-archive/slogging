@@ -13,13 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections
-from urllib import unquote
-import copy
-from tzlocal import get_localzone
 from datetime import datetime
-from slogging import common
 import pytz
+from slogging import common
+from tzlocal import get_localzone
+from urllib import unquote
 from urlparse import urlparse
 
 # conditionalize the return_ips method based on whether or not iptools
@@ -29,9 +27,10 @@ try:
     CIDR_support = True
 
     def return_ips(conf, conf_tag):
-        return set(k for k in
-                    IpRangeList(*[x.strip() for x in
-                    conf.get(conf_tag, '').split(',') if x.strip()]))
+        return set(k for k in IpRangeList(*[
+            x.strip() for x in conf.get(conf_tag, '').split(',')
+            if x.strip()]))
+
     def sanitize_ips(line_data):
         for x in ['lb_ip', 'client_ip', 'log_source']:
             if line_data[x] == '-':
@@ -40,26 +39,29 @@ except ImportError:
     CIDR_support = False
 
     def return_ips(conf, conf_tag):
-        return ([x.strip() for x in conf.get(conf_tag, '').split(',')
+        return ([
+            x.strip() for x in conf.get(conf_tag, '').split(',')
             if x.strip()])
 
-from swift.common.utils import split_path, get_logger
+from swift.common import utils
 
 month_map = '_ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split()
 LISTING_PARAMS = set(
-                'path limit format delimiter marker end_marker prefix'.split())
+    'path limit format delimiter marker end_marker prefix'.split())
 local_zone = get_localzone()
 
 
 class AccessLogProcessor(object):
-    """Transform proxy server access logs"""
+    """AccessLogProcessor class.
 
+    Transform proxy server access logs
+    """
     def __init__(self, conf):
         self.server_name = conf.get('server_name', 'proxy-server')
         for conf_tag in ['lb_private_ips', 'service_ips']:
             setattr(self, conf_tag, return_ips(conf, conf_tag))
         self.warn_percent = float(conf.get('warn_percent', '0.8'))
-        self.logger = get_logger(conf, log_route='access-processor')
+        self.logger = utils.get_logger(conf, log_route='access-processor')
         self.time_zone = common.get_time_zone(conf, self.logger, 'time_zone',
                                               str(local_zone))
 
@@ -70,23 +72,23 @@ class AccessLogProcessor(object):
             log_source = None
             split_log = raw_log[16:].split(' ')
             (unused,
-            server,
-            client_ip,
-            lb_ip,
-            timestamp,
-            method,
-            request,
-            http_version,
-            code,
-            referrer,
-            user_agent,
-            auth_token,
-            bytes_in,
-            bytes_out,
-            etag,
-            trans_id,
-            headers,
-            processing_time) = (unquote(x) for x in split_log[:18])
+             server,
+             client_ip,
+             lb_ip,
+             timestamp,
+             method,
+             request,
+             http_version,
+             code,
+             referrer,
+             user_agent,
+             auth_token,
+             bytes_in,
+             bytes_out,
+             etag,
+             trans_id,
+             headers,
+             processing_time) = (unquote(x) for x in split_log[:18])
             if len(split_log) > 18:
                 log_source = split_log[18]
         except ValueError:
@@ -94,26 +96,27 @@ class AccessLogProcessor(object):
             return {}
         if server != self.server_name:
             # incorrect server name in log line
-            self.logger.debug(_('Bad server name: found "%(found)s" ' \
-                    'expected "%(expected)s"') %
-                    {'found': server, 'expected': self.server_name})
+            self.logger.debug(_('Bad server name: found "%(found)s" '
+                                'expected "%(expected)s"') %
+                              {'found': server, 'expected': self.server_name})
             return {}
         try:
             parsed_url = urlparse(request)
             request = parsed_url.path
             query = parsed_url.query
             (version, account, container_name, object_name) = \
-                split_path(request, 2, 4, True)
-        except ValueError, e:
-            self.logger.debug(_('Invalid path: %(error)s from data: %(log)s') %
-            {'error': e, 'log': repr(raw_log)})
+                utils.split_path(request, 2, 4, True)
+        except ValueError as e:
+            self.logger.debug(
+                _('Invalid path: %(error)s from data: %(log)s') %
+                {'error': e, 'log': repr(raw_log)})
             return {}
         if version != 'v1':
             # "In the wild" places this can be caught are with auth systems
             # that use the same endpoint as the rest of the Swift API (eg
             # tempauth or swauth). But if the Swift API ever does change, this
             # protects that too.
-            self.logger.debug(_('Unexpected Swift version string: found ' \
+            self.logger.debug(_('Unexpected Swift version string: found '
                                 '"%s" expected "v1"') % version)
             return {}
         if query != "":
@@ -187,7 +190,7 @@ class AccessLogProcessor(object):
             method = line_data['method']
             code = int(line_data['code'])
             object_name = line_data['object_name']
-            client_ip = line_data['client_ip']
+            # client_ip = line_data['client_ip']
 
             op_level = None
             if not container_name:
@@ -219,17 +222,18 @@ class AccessLogProcessor(object):
 
             d[(source, 'bytes_out')] = d.setdefault((
                 source, 'bytes_out'), 0) + bytes_out
-            d[(source, 'bytes_in')] = d.setdefault((source, 'bytes_in'), 0) + \
-                                      bytes_in
+            d[(source, 'bytes_in')] = \
+                d.setdefault((source, 'bytes_in'), 0) + bytes_in
 
-            d['format_query'] = d.setdefault('format_query', 0) + \
-                                line_data.get('format', 0)
-            d['marker_query'] = d.setdefault('marker_query', 0) + \
-                                line_data.get('marker', 0)
-            d['prefix_query'] = d.setdefault('prefix_query', 0) + \
-                                line_data.get('prefix', 0)
-            d['delimiter_query'] = d.setdefault('delimiter_query', 0) + \
-                                   line_data.get('delimiter', 0)
+            d['format_query'] = \
+                d.setdefault('format_query', 0) + line_data.get('format', 0)
+            d['marker_query'] = \
+                d.setdefault('marker_query', 0) + line_data.get('marker', 0)
+            d['prefix_query'] = \
+                d.setdefault('prefix_query', 0) + line_data.get('prefix', 0)
+            d['delimiter_query'] = \
+                d.setdefault('delimiter_query', 0) + line_data.get('delimiter',
+                                                                   0)
             path = line_data.get('path', 0)
             d['path_query'] = d.setdefault('path_query', 0) + path
 
@@ -241,9 +245,12 @@ class AccessLogProcessor(object):
         if bad_lines > (total_lines * self.warn_percent):
             name = '/'.join([data_object_account, data_object_container,
                              data_object_name])
-            self.logger.warning(_('I found a bunch of bad lines in %(name)s '\
-                    '(%(bad)d bad, %(total)d total)') %
-                    {'name': name, 'bad': bad_lines, 'total': total_lines})
+            self.logger.warning(_(
+                'I found a bunch of bad lines in %(name)s '
+                '(%(bad)d bad, %(total)d total)') % {
+                'name': name,
+                'bad': bad_lines,
+                'total': total_lines})
         return hourly_aggr_info
 
     def keylist_mapping(self):
@@ -253,7 +260,7 @@ class AccessLogProcessor(object):
         code_keys = '2xx 4xx 5xx'.split()
 
         keylist_mapping = {
-        #   <db key> : <row key> or <set of row keys>
+            #   <db key> : <row key> or <set of row keys>
             'service_bw_in': ('service', 'bytes_in'),
             'service_bw_out': ('service', 'bytes_out'),
             'public_bw_in': ('public', 'bytes_in'),
@@ -274,19 +281,19 @@ class AccessLogProcessor(object):
                 for verb in verb_keys:
                     for code in code_keys:
                         keylist_mapping['account_requests'].add(
-                                        (source, 'account', verb, code))
+                            (source, 'account', verb, code))
                         keylist_mapping['container_requests'].add(
-                                        (source, 'container', verb, code))
+                            (source, 'container', verb, code))
                         keylist_mapping['object_requests'].add(
-                                        (source, 'object', verb, code))
+                            (source, 'object', verb, code))
                         keylist_mapping['service_request'].add(
-                                        ('service', level, verb, code))
+                            ('service', level, verb, code))
                         keylist_mapping['public_request'].add(
-                                        ('public', level, verb, code))
+                            ('public', level, verb, code))
                         keylist_mapping[verb].add(
-                                        (source, level, verb, code))
+                            (source, level, verb, code))
                         keylist_mapping[code].add(
-                                        (source, level, verb, code))
+                            (source, level, verb, code))
                         keylist_mapping['ops_count'].add(
-                                        (source, level, verb, code))
+                            (source, level, verb, code))
         return keylist_mapping

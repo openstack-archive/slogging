@@ -17,16 +17,17 @@
 from optparse import OptionParser
 
 from slogging.log_processor import LogProcessorDaemon
-from swift.common.utils import parse_options
 from swift.common.daemon import run_daemon
+from swift.common.utils import parse_options
 
 if __name__ == '__main__':
     parser = OptionParser(usage='Usage: %prog [options] <conf_file>')
 
     parser.add_option('--lookback_hours', type='int', dest='lookback_hours',
-        help='Hours in the past to start looking for log files')
+                      help='Hours in the past to start looking for log files')
     parser.add_option('--lookback_window', type='int', dest='lookback_window',
-        help='Hours past lookback_hours to stop looking for log files')
+                      help='Hours past lookback_hours '
+                           'to stop looking for log files')
 
     conf_file, options = parse_options(parser)
     # currently the LogProcessorDaemon only supports run_once

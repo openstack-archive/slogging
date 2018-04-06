@@ -13,18 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
-from test_slogging.unit import tmpfile
-import Queue
 import datetime
 import hashlib
-import pickle
-import time
 
+import pickle
 from slogging import internal_proxy
-from slogging import log_processor
 from slogging import log_common
+from slogging import log_processor
 from swift.common.exceptions import ChunkReadTimeout
+
+from test.unit import tmpfile
+import time
+import unittest
 
 
 class FakeUploadApp(object):
@@ -86,15 +86,16 @@ class DumbInternalProxy(object):
 class TestLogProcessor(unittest.TestCase):
 
     access_test_line = 'Jul  9 04:14:30 saio proxy-server 1.2.3.4 4.5.6.7 '\
-                    '09/Jul/2010/04/14/30 GET '\
-                    '/v1/acct/foo/bar?format=json&foo HTTP/1.0 200 - '\
-                    'curl tk4e350daf-9338-4cc6-aabb-090e49babfbd '\
-                    '6 95 - txfa431231-7f07-42fd-8fc7-7da9d8cc1f90 - 0.0262'
+                       '09/Jul/2010/04/14/30 GET '\
+                       '/v1/acct/foo/bar?format=json&foo HTTP/1.0 200 - '\
+                       'curl tk4e350daf-9338-4cc6-aabb-090e49babfbd '\
+                       '6 95 - txfa431231-7f07-42fd-8fc7-7da9d8cc1f90 - 0.0262'
     stats_test_line = 'account,1,2,3'
-    proxy_config = {'log-processor': {
-                    'swift_account': 'foo'
-                    }
-                   }
+    proxy_config = {
+        'log-processor': {
+            'swift_account': 'foo',
+            'time_zone': 'UTC',
+        }}
 
     def test_lazy_load_internal_proxy(self):
         # stub out internal_proxy's upload_app
@@ -103,29 +104,31 @@ class TestLogProcessor(unittest.TestCase):
 use = egg:swift#proxy
 """
         with tmpfile(dummy_proxy_config) as proxy_config_file:
-            conf = {'log-processor': {
+            conf = {
+                'log-processor': {
                     'proxy_server_conf': proxy_config_file,
-                    'swift_account': 'foo'
-                }
-            }
+                    'swift_account': 'foo',
+                    'time_zone': 'UTC',
+                }}
             p = log_processor.LogProcessor(conf, DumbLogger())
-            self.assert_(isinstance(p._internal_proxy,
-                                    None.__class__))
-            self.assert_(isinstance(p.internal_proxy,
-                                    log_processor.InternalProxy))
-            self.assertEquals(p.internal_proxy, p._internal_proxy)
+            self.assertTrue(isinstance(p._internal_proxy,
+                                       None.__class__))
+            self.assertTrue(isinstance(p.internal_proxy,
+                                       internal_proxy.InternalProxy))
+            self.assertEqual(p.internal_proxy, p._internal_proxy)
         # test with empty config variable
-        conf = {'log-processor': {
+        conf = {
+            'log-processor': {
                 'proxy_server_conf': '',
-                'swift_account': 'foo'
-            }
-        }
+                'swift_account': 'foo',
+                'time_zone': 'UTC',
+            }}
         q = log_processor.LogProcessor(conf, DumbLogger())
-        self.assert_(isinstance(q._internal_proxy,
-                                None.__class__))
-        self.assert_(isinstance(q.internal_proxy,
-                                log_processor.InternalProxy))
-        self.assertEquals(q.internal_proxy, q._internal_proxy)
+        self.assertTrue(isinstance(q._internal_proxy,
+                                   None.__class__))
+        self.assertTrue(isinstance(q.internal_proxy,
+                                   internal_proxy.InternalProxy))
+        self.assertEqual(q.internal_proxy, q._internal_proxy)
 
         # reset FakeUploadApp
         reload(internal_proxy)
@@ -133,75 +136,76 @@ use = egg:swift#proxy
     def test_access_log_line_parser(self):
         access_proxy_config = self.proxy_config.copy()
         access_proxy_config.update({
-                        'log-processor-access': {
-                            'source_filename_format': '%Y%m%d%H*',
-                            'class_path':
-                                'slogging.access_processor.AccessLogProcessor'
-                        }})
+            'log-processor-access': {
+                'source_filename_format': '%Y%m%d%H*',
+                'class_path': 'slogging.access_processor.AccessLogProcessor',
+                'time_zone': 'UTC',
+            }})
         p = log_processor.LogProcessor(access_proxy_config, DumbLogger())
         result = p.plugins['access']['instance'].log_line_parser(
-                                                    self.access_test_line)
-        self.assertEquals(result, {'code': 200,
-           'processing_time': '0.0262',
-           'auth_token': 'tk4e350daf-9338-4cc6-aabb-090e49babfbd',
-           'month': '07',
-           'second': '30',
-           'year': '2010',
-           'query': 'format=json&foo',
-           'tz': '+0000',
-           'http_version': 'HTTP/1.0',
-           'object_name': 'bar',
-           'etag': '-',
-           'method': 'GET',
-           'trans_id': 'txfa431231-7f07-42fd-8fc7-7da9d8cc1f90',
-           'client_ip': '1.2.3.4',
-           'format': 1,
-           'bytes_out': 95,
-           'container_name': 'foo',
-           'day': '09',
-           'minute': '14',
-           'account': 'acct',
-           'hour': '04',
-           'referrer': '-',
-           'request': '/v1/acct/foo/bar',
-           'user_agent': 'curl',
-           'bytes_in': 6,
-           'lb_ip': '4.5.6.7',
-           'log_source': None})
+            self.access_test_line)
+        self.assertEqual(result, {
+            'code': 200,
+            'processing_time': '0.0262',
+            'auth_token': 'tk4e350daf-9338-4cc6-aabb-090e49babfbd',
+            'month': '07',
+            'second': '30',
+            'year': '2010',
+            'query': 'format=json&foo',
+            'tz': '+0000',
+            'http_version': 'HTTP/1.0',
+            'object_name': 'bar',
+            'etag': '-',
+            'method': 'GET',
+            'trans_id': 'txfa431231-7f07-42fd-8fc7-7da9d8cc1f90',
+            'client_ip': '1.2.3.4',
+            'format': 1,
+            'bytes_out': 95,
+            'container_name': 'foo',
+            'day': '09',
+            'minute': '14',
+            'account': 'acct',
+            'hour': '04',
+            'referrer': '-',
+            'request': '/v1/acct/foo/bar',
+            'user_agent': 'curl',
+            'bytes_in': 6,
+            'lb_ip': '4.5.6.7',
+            'log_source': None})
 
     def test_process_one_access_file(self):
         access_proxy_config = self.proxy_config.copy()
         access_proxy_config.update({
-                        'log-processor-access': {
-                            'source_filename_format': '%Y%m%d%H*',
-                            'class_path':
-                                'slogging.access_processor.AccessLogProcessor'
-                        }})
+            'log-processor-access': {
+                'source_filename_format': '%Y%m%d%H*',
+                'class_path': 'slogging.access_processor.AccessLogProcessor',
+                'time_zone': 'UTC',
+            }})
         p = log_processor.LogProcessor(access_proxy_config, DumbLogger())
 
         def get_object_data(*a, **kw):
             return [self.access_test_line]
         p.get_object_data = get_object_data
         result = p.process_one_file('access', 'a', 'c', 'o')
-        expected = {('acct', '2010', '07', '09', '04'):
-                    {('public', 'object', 'GET', '2xx'): 1,
-                    ('public', 'bytes_out'): 95,
-                    'marker_query': 0,
-                    'format_query': 1,
-                    'delimiter_query': 0,
-                    'path_query': 0,
-                    ('public', 'bytes_in'): 6,
-                    'prefix_query': 0}}
-        self.assertEquals(result, expected)
+        expected = {('acct', '2010', '07', '09', '04'): {
+            ('public', 'object', 'GET', '2xx'): 1,
+            ('public', 'bytes_out'): 95,
+            'marker_query': 0,
+            'format_query': 1,
+            'delimiter_query': 0,
+            'path_query': 0,
+            ('public', 'bytes_in'): 6,
+            'prefix_query': 0}}
+        self.assertEqual(result, expected)
 
     def test_process_one_access_file_error(self):
         access_proxy_config = self.proxy_config.copy()
         access_proxy_config.update({
-                        'log-processor-access': {
-                            'source_filename_format': '%Y%m%d%H*',
-                            'class_path':
-                                'slogging.access_processor.AccessLogProcessor'
-                        }})
+            'log-processor-access': {
+                'source_filename_format': '%Y%m%d%H*',
+                'class_path': 'slogging.access_processor.AccessLogProcessor',
+                'time_zone': 'UTC',
+            }})
         p = log_processor.LogProcessor(access_proxy_config, DumbLogger())
         p._internal_proxy = DumbInternalProxy(code=500)
         self.assertRaises(log_common.BadFileDownload, p.process_one_file,
@@ -212,34 +216,34 @@ use = egg:swift#proxy
         p._internal_proxy = DumbInternalProxy()
         result = p.get_container_listing('a', 'foo')
         expected = ['2010/03/14/13/obj1']
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
         result = p.get_container_listing('a', 'foo', listing_filter=expected)
         expected = []
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
         result = p.get_container_listing('a', 'foo', start_date='2010031412',
-                                            end_date='2010031414')
+                                         end_date='2010031414')
         expected = ['2010/03/14/13/obj1']
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
         result = p.get_container_listing('a', 'foo', start_date='2010031414')
         expected = []
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
         result = p.get_container_listing('a', 'foo', start_date='2010031410',
-                                            end_date='2010031412')
+                                         end_date='2010031412')
         expected = []
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
         result = p.get_container_listing('a', 'foo', start_date='2010031412',
-                                            end_date='2010031413')
+                                         end_date='2010031413')
         expected = ['2010/03/14/13/obj1']
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
 
     def test_get_object_data(self):
         p = log_processor.LogProcessor(self.proxy_config, DumbLogger())
         p._internal_proxy = DumbInternalProxy()
         result = list(p.get_object_data('a', 'c', 'o', False))
         expected = ['obj', 'data']
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
         result = list(p.get_object_data('a', 'c', 'o.gz', True))
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
 
     def test_get_object_data_errors(self):
         p = log_processor.LogProcessor(self.proxy_config, DumbLogger())
@@ -256,10 +260,10 @@ use = egg:swift#proxy
     def test_get_stat_totals(self):
         stats_proxy_config = self.proxy_config.copy()
         stats_proxy_config.update({
-                        'log-processor-stats': {
-                            'class_path':
-                                'slogging.stats_processor.StatsLogProcessor'
-                        }})
+            'log-processor-stats': {
+                'class_path': 'slogging.stats_processor.StatsLogProcessor',
+                'time_zone': 'UTC',
+            }})
         p = log_processor.LogProcessor(stats_proxy_config, DumbLogger())
         p._internal_proxy = DumbInternalProxy()
 
@@ -267,23 +271,24 @@ use = egg:swift#proxy
             return [self.stats_test_line]
         p.get_object_data = get_object_data
         result = p.process_one_file('stats', 'a', 'c', 'y/m/d/h/o')
-        expected = {('account', 'y', 'm', 'd', 'h'):
-                    {'replica_count': 1,
-                    'object_count': 2,
-                    'container_count': 1,
-                    'bytes_used': 3}}
-        self.assertEquals(result, expected)
+        expected = {
+            ('account', 'y', 'm', 'd', 'h'):
+                {'replica_count': 1,
+                 'object_count': 2,
+                 'container_count': 1,
+                 'bytes_used': 3}}
+        self.assertEqual(result, expected)
 
     def test_generate_keylist_mapping(self):
         p = log_processor.LogProcessor(self.proxy_config, DumbLogger())
         result = p.generate_keylist_mapping()
         expected = {}
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
 
     def test_generate_keylist_mapping_with_dummy_plugins(self):
         class Plugin1(object):
             def keylist_mapping(self):
-                return {'a': 'b', 'c': 'd', 'e': ['f', 'g']}
+                return {'a': 'b', 'c': 'd', 'e': set(['f', 'g'])}
 
         class Plugin2(object):
             def keylist_mapping(self):
@@ -294,35 +299,36 @@ use = egg:swift#proxy
         result = p.generate_keylist_mapping()
         expected = {'a': set(['b', '1']), 'c': 'd', 'e': set(['2', 'f', 'g']),
                     'h': '3'}
-        self.assertEquals(result, expected)
+        self.assertEqual(result, expected)
 
     def test_access_keylist_mapping_format(self):
         proxy_config = self.proxy_config.copy()
         proxy_config.update({
-                        'log-processor-access': {
-                            'source_filename_format': '%Y%m%d%H*',
-                            'class_path':
-                                'slogging.access_processor.AccessLogProcessor'
-                        }})
+            'log-processor-access': {
+                'source_filename_format': '%Y%m%d%H*',
+                'class_path':
+                    'slogging.access_processor.AccessLogProcessor',
+                'time_zone': 'UTC',
+            }})
         p = log_processor.LogProcessor(proxy_config, DumbLogger())
         mapping = p.generate_keylist_mapping()
         for k, v in mapping.items():
             # these only work for Py2.7+
-            #self.assertIsInstance(k, str)
+            # self.assertIsInstance(k, str)
             self.assertTrue(isinstance(k, str), type(k))
 
     def test_stats_keylist_mapping_format(self):
         proxy_config = self.proxy_config.copy()
         proxy_config.update({
-                        'log-processor-stats': {
-                            'class_path':
-                                'slogging.stats_processor.StatsLogProcessor'
-                        }})
+            'log-processor-stats': {
+                'class_path': 'slogging.stats_processor.StatsLogProcessor',
+                'time_zone': 'UTC',
+            }})
         p = log_processor.LogProcessor(proxy_config, DumbLogger())
         mapping = p.generate_keylist_mapping()
         for k, v in mapping.items():
             # these only work for Py2.7+
-            #self.assertIsInstance(k, str)
+            # self.assertIsInstance(k, str)
             self.assertTrue(isinstance(k, str), type(k))
 
 
@@ -346,17 +352,16 @@ class TestLogProcessorDaemon(unittest.TestCase):
                 [d(2009, 5, 6, 7, 8), 1200, 100, '2009031707', '2009032111'],
                 [d(2008, 9, 10, 11, 12), 3000, 1000, '2008050811',
                     '2008061903'],
-                ]:
-
+            ]:
                 log_processor.now = lambda tz: x[0]
 
                 d = MockLogProcessorDaemon(x[1], x[2])
-                self.assertEquals((x[3], x[4]), d.get_lookback_interval())
+                self.assertEqual((x[3], x[4]), d.get_lookback_interval())
         finally:
             log_processor.now = datetime.datetime.now
 
     def test_get_processed_files_list(self):
-        class MockLogProcessor():
+        class MockLogProcessor(object):
             def __init__(self, stream):
                 self.stream = stream
 
@@ -372,16 +377,16 @@ class TestLogProcessorDaemon(unittest.TestCase):
 
         file_list = set(['a', 'b', 'c'])
 
-        for s, l in [['', None],
-                [pickle.dumps(set()).split('\n'), set()],
-                [pickle.dumps(file_list).split('\n'), file_list],
-            ]:
-
-            self.assertEquals(l,
-                MockLogProcessorDaemon(s).get_processed_files_list())
+        for s, l in [
+            ['', None],
+            [pickle.dumps(set()).split('\n'), set()],
+            [pickle.dumps(file_list).split('\n'), file_list],
+        ]:
+            self.assertEqual(
+                l, MockLogProcessorDaemon(s).get_processed_files_list())
 
     def test_get_processed_files_list_bad_file_downloads(self):
-        class MockLogProcessor():
+        class MockLogProcessor(object):
             def __init__(self, status_code):
                 self.err = log_common.BadFileDownload(status_code)
 
@@ -396,8 +401,8 @@ class TestLogProcessorDaemon(unittest.TestCase):
                 self.processed_files_filename = 'filename'
 
         for c, l in [[404, set()], [503, None], [None, None]]:
-            self.assertEquals(l,
-                MockLogProcessorDaemon(c).get_processed_files_list())
+            self.assertEqual(
+                l, MockLogProcessorDaemon(c).get_processed_files_list())
 
     def test_get_aggregate_data(self):
         # when run "for real"
@@ -414,7 +419,7 @@ class TestLogProcessorDaemon(unittest.TestCase):
                 'acct2_time1': {'field1': 6, 'field2': 7},
                 'acct3_time3': {'field1': 8, 'field2': 9},
                 }
-            ],
+             ],
             ['file2', {'acct1_time1': {'field1': 10}}],
         ]
 
@@ -433,9 +438,9 @@ class TestLogProcessorDaemon(unittest.TestCase):
         data_out = d.get_aggregate_data(processed_files, data_in)
 
         for k, v in expected_data_out.items():
-            self.assertEquals(v, data_out[k])
+            self.assertEqual(v, data_out[k])
 
-        self.assertEquals(set(['file1', 'file2']), processed_files)
+        self.assertEqual(set(['file1', 'file2']), processed_files)
 
     def test_get_final_info(self):
         # when run "for real"
@@ -457,7 +462,7 @@ class TestLogProcessorDaemon(unittest.TestCase):
 
         data_in = {
             'acct1_time1': {'field1': 11, 'field2': 2, 'field3': 3,
-                'field4': 8, 'field5': 11},
+                            'field4': 8, 'field5': 11},
             'acct1_time2': {'field1': 4, 'field2': 5},
             'acct2_time1': {'field1': 6, 'field2': 7},
             'acct3_time3': {'field1': 8, 'field2': 9},
@@ -465,43 +470,43 @@ class TestLogProcessorDaemon(unittest.TestCase):
 
         expected_data_out = {
             'acct1_time1': {'out_field1': 16, 'out_field2': 5,
-                'out_field3': 3, 'out_field4': 8, 'out_field5': 0,
-                'out_field6': 0, 'out_field7': 0},
+                            'out_field3': 3, 'out_field4': 8, 'out_field5': 0,
+                            'out_field6': 0, 'out_field7': 0},
             'acct1_time2': {'out_field1': 9, 'out_field2': 5,
-                'out_field3': 0, 'out_field4': 0, 'out_field5': 0,
-                'out_field6': 0, 'out_field7': 0},
+                            'out_field3': 0, 'out_field4': 0, 'out_field5': 0,
+                            'out_field6': 0, 'out_field7': 0},
             'acct2_time1': {'out_field1': 13, 'out_field2': 7,
-                'out_field3': 0, 'out_field4': 0, 'out_field5': 0,
-                'out_field6': 0, 'out_field7': 0},
+                            'out_field3': 0, 'out_field4': 0, 'out_field5': 0,
+                            'out_field6': 0, 'out_field7': 0},
             'acct3_time3': {'out_field1': 17, 'out_field2': 9,
-                'out_field3': 0, 'out_field4': 0, 'out_field5': 0,
-                'out_field6': 0, 'out_field7': 0},
+                            'out_field3': 0, 'out_field4': 0, 'out_field5': 0,
+                            'out_field6': 0, 'out_field7': 0},
         }
 
-        self.assertEquals(expected_data_out,
-            MockLogProcessorDaemon().get_final_info(data_in))
+        self.assertEqual(expected_data_out,
+                         MockLogProcessorDaemon().get_final_info(data_in))
 
     def test_store_processed_files_list(self):
-        class MockInternalProxy:
+        class MockInternalProxy(object):
             def __init__(self, test, daemon, processed_files):
                 self.test = test
                 self.daemon = daemon
                 self.processed_files = processed_files
 
             def upload_file(self, f, account, container, filename):
-                self.test.assertEquals(self.processed_files,
-                    pickle.loads(f.getvalue()))
-                self.test.assertEquals(self.daemon.log_processor_account,
-                    account)
-                self.test.assertEquals(self.daemon.log_processor_container,
-                    container)
-                self.test.assertEquals(self.daemon.processed_files_filename,
-                    filename)
+                self.test.assertEqual(self.processed_files,
+                                      pickle.loads(f.getvalue()))
+                self.test.assertEqual(self.daemon.log_processor_account,
+                                      account)
+                self.test.assertEqual(self.daemon.log_processor_container,
+                                      container)
+                self.test.assertEqual(self.daemon.processed_files_filename,
+                                      filename)
 
-        class MockLogProcessor:
+        class MockLogProcessor(object):
             def __init__(self, test, daemon, processed_files):
                 self.internal_proxy = MockInternalProxy(test, daemon,
-                    processed_files)
+                                                        processed_files)
 
         class MockLogProcessorDaemon(log_processor.LogProcessorDaemon):
             def __init__(self, test, processed_files):
@@ -537,13 +542,13 @@ class TestLogProcessorDaemon(unittest.TestCase):
         ]
 
         data_out = MockLogProcessorDaemon().get_output(data_in)
-        self.assertEquals(expected_data_out[0], data_out[0])
+        self.assertEqual(expected_data_out[0], data_out[0])
 
         for row in data_out[1:]:
-            self.assert_(row in expected_data_out)
+            self.assertTrue(row in expected_data_out)
 
         for row in expected_data_out[1:]:
-            self.assert_(row in data_out)
+            self.assertTrue(row in data_out)
 
     def test_store_output(self):
         try:
@@ -551,7 +556,7 @@ class TestLogProcessorDaemon(unittest.TestCase):
             mock_strftime_return = '2010/03/02/01/'
 
             def mock_strftime(format, t):
-                self.assertEquals('%Y/%m/%d/%H/', format)
+                self.assertEqual('%Y/%m/%d/%H/', format)
                 return mock_strftime_return
             log_processor.time.strftime = mock_strftime
 
@@ -567,32 +572,35 @@ class TestLogProcessorDaemon(unittest.TestCase):
             h = hashlib.md5(expected_output).hexdigest()
             expected_filename = '%s%s.csv.gz' % (mock_strftime_return, h)
 
-            class MockInternalProxy:
+            class MockInternalProxy(object):
                 def __init__(self, test, daemon, expected_filename,
-                    expected_output):
+                             expected_output):
                     self.test = test
                     self.daemon = daemon
                     self.expected_filename = expected_filename
                     self.expected_output = expected_output
 
                 def upload_file(self, f, account, container, filename):
-                    self.test.assertEquals(self.daemon.log_processor_account,
-                        account)
-                    self.test.assertEquals(self.daemon.log_processor_container,
-                        container)
-                    self.test.assertEquals(self.expected_filename, filename)
-                    self.test.assertEquals(self.expected_output, f.getvalue())
+                    self.test.assertEqual(self.daemon.log_processor_account,
+                                          account)
+                    self.test.assertEqual(self.daemon.log_processor_container,
+                                          container)
+                    self.test.assertEqual(self.expected_filename, filename)
+                    self.test.assertEqual(self.expected_output, f.getvalue())
 
-            class MockLogProcessor:
-                def __init__(self, test, daemon, expected_filename,
-                    expected_output):
-                    self.internal_proxy = MockInternalProxy(test, daemon,
-                        expected_filename, expected_output)
+            class MockLogProcessor(object):
+                def __init__(self, test,
+                             daemon,
+                             expected_filename,
+                             expected_output):
+                    self.internal_proxy = MockInternalProxy(
+                        test, daemon, expected_filename, expected_output)
 
             class MockLogProcessorDaemon(log_processor.LogProcessorDaemon):
                 def __init__(self, test, expected_filename, expected_output):
                     self.log_processor = MockLogProcessor(test, self,
-                        expected_filename, expected_output)
+                                                          expected_filename,
+                                                          expected_output)
                     self.log_processor_account = 'account'
                     self.log_processor_container = 'container'
                     self.processed_files_filename = 'filename'
@@ -612,7 +620,7 @@ class TestLogProcessorDaemon(unittest.TestCase):
 
         value_return = 'keylist_mapping'
 
-        class MockLogProcessor:
+        class MockLogProcessor(object):
             def __init__(self):
                 self.call_count = 0
 
@@ -626,16 +634,16 @@ class TestLogProcessorDaemon(unittest.TestCase):
                 self._keylist_mapping = None
 
         d = MockLogProcessorDaemon()
-        self.assertEquals(value_return, d.keylist_mapping)
-        self.assertEquals(value_return, d.keylist_mapping)
-        self.assertEquals(1, d.log_processor.call_count)
+        self.assertEqual(value_return, d.keylist_mapping)
+        self.assertEqual(value_return, d.keylist_mapping)
+        self.assertEqual(1, d.log_processor.call_count)
 
     def test_process_logs(self):
         try:
             mock_logs_to_process = 'logs_to_process'
             mock_processed_files = 'processed_files'
 
-            real_multiprocess_collate = log_processor.multiprocess_collate
+            real_multiprocess_collate = log_common.multiprocess_collate
             multiprocess_collate_return = 'multiprocess_collate_return'
 
             get_aggregate_data_return = 'get_aggregate_data_return'
@@ -650,19 +658,19 @@ class TestLogProcessorDaemon(unittest.TestCase):
                     self.worker_count = 'worker_count'
 
                 def get_aggregate_data(self, processed_files, results):
-                    self.test.assertEquals(mock_processed_files,
-                        processed_files)
-                    self.test.assertEquals(multiprocess_collate_return,
-                        results)
+                    self.test.assertEqual(mock_processed_files,
+                                          processed_files)
+                    self.test.assertEqual(multiprocess_collate_return,
+                                          results)
                     return get_aggregate_data_return
 
                 def get_final_info(self, aggr_data):
-                    self.test.assertEquals(get_aggregate_data_return,
-                        aggr_data)
+                    self.test.assertEqual(get_aggregate_data_return,
+                                          aggr_data)
                     return get_final_info_return
 
                 def get_output(self, final_info):
-                    self.test.assertEquals(get_final_info_return, final_info)
+                    self.test.assertEqual(get_final_info_return, final_info)
                     return get_output_return
 
             d = MockLogProcessorDaemon(self)
@@ -670,27 +678,27 @@ class TestLogProcessorDaemon(unittest.TestCase):
             def mock_multiprocess_collate(processor_klass, processor_args,
                                           processor_method, logs_to_process,
                                           worker_count):
-                self.assertEquals(d.total_conf, processor_args[0])
-                self.assertEquals(d.logger, processor_args[1])
+                self.assertEqual(d.total_conf, processor_args[0])
+                self.assertEqual(d.logger, processor_args[1])
 
-                self.assertEquals(mock_logs_to_process, logs_to_process)
-                self.assertEquals(d.worker_count, worker_count)
+                self.assertEqual(mock_logs_to_process, logs_to_process)
+                self.assertEqual(d.worker_count, worker_count)
 
                 return multiprocess_collate_return
 
-            log_processor.multiprocess_collate = mock_multiprocess_collate
+            log_common.multiprocess_collate = mock_multiprocess_collate
 
             output = d.process_logs(mock_logs_to_process, mock_processed_files)
-            self.assertEquals(get_output_return, output)
+            self.assertEqual(get_output_return, output)
         finally:
             log_processor.multiprocess_collate = real_multiprocess_collate
 
     def test_run_once_get_processed_files_list_returns_none(self):
-        class MockLogProcessor:
+        class MockLogProcessor(object):
             def get_data_list(self, lookback_start, lookback_end,
-                processed_files):
-                raise unittest.TestCase.failureException, \
-                    'Method should not be called'
+                              processed_files):
+                raise unittest.TestCase.failureException(
+                    'Method should not be called')
 
         class MockLogProcessorDaemon(log_processor.LogProcessorDaemon):
             def __init__(self):
@@ -706,22 +714,25 @@ class TestLogProcessorDaemon(unittest.TestCase):
         MockLogProcessorDaemon().run_once()
 
     def test_run_once_no_logs_to_process(self):
-        class MockLogProcessor():
+        class MockLogProcessor(object):
             def __init__(self, daemon, test):
                 self.daemon = daemon
                 self.test = test
 
-            def get_data_list(self, lookback_start, lookback_end,
-                processed_files):
-                self.test.assertEquals(self.daemon.lookback_start,
-                    lookback_start)
-                self.test.assertEquals(self.daemon.lookback_end,
-                    lookback_end)
-                self.test.assertEquals(self.daemon.processed_files,
-                    processed_files)
+            def get_data_list(self,
+                              lookback_start,
+                              lookback_end,
+                              processed_files):
+                self.test.assertEqual(self.daemon.lookback_start,
+                                      lookback_start)
+                self.test.assertEqual(self.daemon.lookback_end,
+                                      lookback_end)
+                self.test.assertEqual(self.daemon.processed_files,
+                                      processed_files)
                 return []
 
         class MockLogProcessorDaemon(log_processor.LogProcessorDaemon):
+
             def __init__(self, test):
                 self.logger = DumbLogger()
                 self.log_processor = MockLogProcessor(self, test)
@@ -736,8 +747,8 @@ class TestLogProcessorDaemon(unittest.TestCase):
                 return self.processed_files
 
             def process_logs(logs_to_process, processed_files):
-                raise unittest.TestCase.failureException, \
-                    'Method should not be called'
+                raise unittest.TestCase.failureException(
+                    'Method should not be called')
 
         MockLogProcessorDaemon(self).run_once()
 
