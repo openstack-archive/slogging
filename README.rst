@@ -5,7 +5,6 @@ Welcome to slogging!
 slogging is a stats and logging tools for OpenStack Swift.
 
 * License: Apache license
-* Documentation: https://docs.openstack.org/slogging/latest/
 * Source: https://git.openstack.org/cgit/openstack/slogging
 * Bugs: https://bugs.launchpad.net/slogging
 
