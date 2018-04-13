@@ -29,11 +29,10 @@ from swift.container.backend import ContainerBroker
 from swift.container.server import DATADIR as container_server_data_dir
 
 import time
-from tzlocal import get_localzone
 import urllib
 
 
-local_zone = get_localzone()
+local_zone = common.get_localzone()
 
 
 class DatabaseStatsCollector(Daemon):
@@ -57,7 +56,7 @@ class DatabaseStatsCollector(Daemon):
         self.logger = utils.get_logger(stats_conf,
                                        log_route='%s-stats' % stats_type)
         self.time_zone = common.get_time_zone(stats_conf, self.logger,
-                                              'time_zone', str(local_zone))
+                                              'time_zone', local_zone)
 
     def run_once(self, *args, **kwargs):
         self.logger.info(_("Gathering %s stats") % self.stats_type)

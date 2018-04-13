@@ -16,20 +16,19 @@
 from datetime import datetime
 import pytz
 from slogging import common
-from tzlocal import get_localzone
 from urllib import unquote
 from urlparse import urlparse
 
 # conditionalize the return_ips method based on whether or not iptools
 # is present in the system. Without iptools, you will lack CIDR support.
 try:
-    from iptools import IpRangeList
+    from netaddr import IPSet
     CIDR_support = True
 
     def return_ips(conf, conf_tag):
-        return set(k for k in IpRangeList(*[
+        return IPSet([
             x.strip() for x in conf.get(conf_tag, '').split(',')
-            if x.strip()]))
+            if x.strip()])
 
     def sanitize_ips(line_data):
         for x in ['lb_ip', 'client_ip', 'log_source']:
@@ -48,7 +47,7 @@ from swift.common import utils
 month_map = '_ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split()
 LISTING_PARAMS = set(
     'path limit format delimiter marker end_marker prefix'.split())
-local_zone = get_localzone()
+local_zone = common.get_localzone()
 
 
 class AccessLogProcessor(object):
@@ -63,7 +62,7 @@ class AccessLogProcessor(object):
         self.warn_percent = float(conf.get('warn_percent', '0.8'))
         self.logger = utils.get_logger(conf, log_route='access-processor')
         self.time_zone = common.get_time_zone(conf, self.logger, 'time_zone',
-                                              str(local_zone))
+                                              local_zone)
 
     def log_line_parser(self, raw_log):
         '''given a raw access log line, return a dict of the good parts'''

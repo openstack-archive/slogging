@@ -25,11 +25,10 @@ from slogging import log_common
 from swift.common.daemon import Daemon
 from swift.common import utils
 import time
-from tzlocal import get_localzone
 
 
 now = datetime.datetime.now
-local_zone = get_localzone()
+local_zone = common.get_localzone()
 
 
 class LogProcessor(log_common.LogProcessorCommon):
@@ -137,7 +136,7 @@ class LogProcessorDaemon(Daemon):
         self._keylist_mapping = None
         self.processed_files_filename = 'processed_files.pickle.gz'
         self.time_zone = common.get_time_zone(c, self.logger, 'time_zone',
-                                              str(local_zone))
+                                              local_zone)
         self.format_type = common.get_format_type(c, self.logger,
                                                   'format_type', 'csv')
 

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import pytz
 
 
@@ -44,3 +45,14 @@ def get_format_type(conf, logger, key, default):
         logger.warning(msg)
         format_type = default
     return format_type
+
+
+def get_localzone():
+    """Get time_zone value."""
+    try:
+        str_time_zone = '/'.join(
+            os.readlink('/etc/localtime').split('/')[-2:])
+    except Exception:
+        str_time_zone = 'UTC'
+
+    return str_time_zone
