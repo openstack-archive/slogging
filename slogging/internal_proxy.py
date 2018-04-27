@@ -16,6 +16,7 @@
 from json import loads as json_loads
 from slogging.compressing_file_reader import CompressingFileReader
 from swift.common import swob
+from swift.common import utils
 from swift.proxy.server import Application
 from urllib import quote
 
@@ -93,7 +94,9 @@ class InternalProxy(object):
         if not self.create_container(account, container):
             return False
 
-        send_headers = {'Transfer-Encoding': 'chunked'}
+        timestamp = utils.Timestamp.now().internal
+        send_headers = {'Transfer-Encoding': 'chunked',
+                        'X-Timestamp': timestamp}
         if headers:
             send_headers.update(headers)
 
