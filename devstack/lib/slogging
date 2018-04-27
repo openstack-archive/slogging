@@ -1,0 +1,125 @@
+#!/bin/bash
+#
+# lib/slogging
+# Functions to control the configuration and operation of the slogging plugin
+
+# Dependencies:
+#
+# - Swift service has already installed into $DEST/swift with below in local.conf
+# - ``s-proxy``, ``s-container``, ``s-object``, ``s-object``
+
+# - ``functions`` file
+# - ``DEST``,  ``$STACK_USER``must be defined
+
+# - ``lib/swift`` file
+# - ``SWIFT_CONFIG_PROXY_SERVER`` must be defined
+
+# ``stack.sh`` file
+# - ``echo_summary`` function must be defined
+#
+
+# ``stack.sh`` calls the entry points in this order:
+#
+# - install_slogging
+# - configure_slogging
+# - verify_swift
+# - metering-sample_slogging
+
+function _get_token_and_endpoint {
+    curl -v -H "X-Storage-User:${SLOGGING['tempuser']}" \
+            -H "X-Storage-Pass:${SLOGGING['temppass']}" \
+               ${SLOGGING['auth_url']} 2>&1 | \
+    egrep 'X-Storage-Url:|X-Auth-Token:' | \
+    sed -e 's|: |=|g' -e 's|<||g' -e 's|\-|_|g' -e 's|\r||g'
+}
+
+function _exec_swift_api {
+    for envvar in $(set | awk -F'=' '/^OS_/{print $1}'); do
+        unset ${envvar}
+    done
+    swift -A ${SLOGGING['auth_url']} \
+          -U ${SLOGGING['tempuser']} \
+          -K ${SLOGGING['temppass']} stat
+}
+
+function install_slogging {
+    pushd $SLOGGING_BASE && {
+        sudo python setup.py install
+    } && popd
+}
+
+function configure_slogging {
+    local saio_base="$DEST/swift/doc/saio"
+    local rsyslog_conf="rsyslog.d/10-swift.conf"
+    local swift_log_base="$DEST/data/swift"
+
+    # Set config
+    if [ ! -f "/etc/$rsyslog_conf" ]; then
+        sudo cp $saio_base/$rsyslog_conf /etc/$rsyslog_conf
+    fi
+    sudo sed -e "
+        s|/var/log/swift|$swift_log_base/logs|g;
+        s|#\$templat|\$templat|g;
+        s|#local1\.|local1.|g;
+    " -i /etc/$rsyslog_conf
+    sudo sed -e '/PrivDropToGroup/c $PrivDropToGroup adm' /etc/rsyslog.conf
+
+    # Set directory
+    sudo mkdir -p $swift_log_base/logs/hourly
+    safe_chown -R $STACK_USER.adm $swift_log_base
+    safe_chmod 775 $swift_log_base/logs $swift_log_base/logs/hourly
+    add_user_to_group syslog adm
+    add_user_to_group $STACK_USER adm
+
+    # Reflect daemon
+    restart_service rsyslog
+
+    # Generate /etc/swift/log-processor.conf
+    local log_processor=$SLOGGING_BASE/etc/log-processor.conf
+    sudo cp $SLOGGING_BASE/devstack/files/log-processor.conf $log_processor
+
+    # set device
+    iniset $log_processor log-processor-container-stats devices $swift_log_base/1
+    iniset $log_processor log-processor-stats devices $swift_log_base/1
+
+    # set log_dir
+    iniset $log_processor log-processor-container-stats log_dir $swift_log_base/logs/stats/
+    iniset $log_processor log-processor-stats log_dir $swift_log_base/logs/stats/
+    iniset $log_processor log-processor-access log_dir $swift_log_base/logs/hourly/
+
+    iniset $log_processor DEFAULT swift_account ${SLOGGING['tempaccount']}
+    iniset $log_processor DEFAULT user $STACK_USER
+    iniset $SWIFT_CONFIG_PROXY_SERVER app:proxy-server log_facility LOG_LOCAL1
+
+    # Set cron
+    if [ "$SLOGGING_CRON" == "True" ]; then
+        sudo cp $SLOGGING_BASE/devstack/files/cron.d/swift-* /etc/cron.d/
+        sudo sed -e "
+            s|%STACK_USER%|$STACK_USER|g;
+            s|%SLOGGING_BASE%|$SLOGGING_BASE|g;
+        " -i /etc/cron.d/swift-*
+    else
+        sudo rm -f /etc/cron.d/swift-*
+    fi
+}
+
+function verify_swift {
+    # Internal proxy(identity) API
+    for var in $(_get_token_and_endpoint); do export $var; done
+    curl -v -H "X-Auth-Token: $X_Auth_Token" $X_Storage_Url
+
+    # Swift API
+    local retry=3
+    local interval=5
+    for i in {1..$retry}; do
+        ( _exec_swift_api ) && return 0
+        sleep $interval
+    done
+    return -1
+}
+
+function metering-sample_slogging {
+    echo_summary "Swift's Function Test"
+    $DEST/swift/.functests
+}
+

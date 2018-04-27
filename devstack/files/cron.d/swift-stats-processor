@@ -1,0 +1,1 @@
+30 * * * * %STACK_USER% export PYTHONPATH=$PYTHONPATH:%SLOGGING_BASE%; %SLOGGING_BASE%/bin/swift-log-stats-collector %SLOGGING_BASE%/etc/log-processor.conf 
