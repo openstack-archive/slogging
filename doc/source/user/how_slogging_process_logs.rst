@@ -4,6 +4,16 @@ How slogging process Swift's logs
 
 This page shows you how slogging process logs on OpenStack Swift.
 
+Get Installed Path
+~~~~~~~~~~~~~~~~~~
+
+You can run the following command to get slogging installed path.::
+
+    dirname $(which swift-log-uploader)
+
+The ``<installed-path>`` on this page shall be replaced with the above results.
+
+
 Log Processing plugins
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -37,9 +47,9 @@ Basically there are three kind of logs.
 
 You can pass plugin's name as argument of ``swift-log-uploader`` like following.::
 
-    /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf access
-    /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf stats
-    /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf container-stats
+    <installed-path>/swift-log-uploader /etc/swift/log-processor.conf access
+    <installed-path>/swift-log-uploader /etc/swift/log-processor.conf stats
+    <installed-path>/swift-log-uploader /etc/swift/log-processor.conf container-stats
 
 You can set above command as cron job so that you can collect those kind of logs in regular basis.
 
@@ -67,7 +77,7 @@ This allows easy log rotation and easy per-hour log processing.
 
 To upload access logs, you can set cron like following::
 
-    /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf access
+    <installed-path>/swift-log-uploader /etc/swift/log-processor.conf access
 
 
 .. _stats-logs:
@@ -98,8 +108,8 @@ the container dbs.
 
 To upload account stats logs and container stats logs, you can set cron like following::
 
-    /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf container-stats
-    /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf stats
+    <installed-path>/swift-log-uploader /etc/swift/log-processor.conf container-stats
+    <installed-path>/swift-log-uploader /etc/swift/log-processor.conf stats
 
 .. _log-processing:
 

@@ -21,24 +21,28 @@ environment.
     local1.notice           /var/log/swift/proxy.error
     local1.*                ~
 
-#. Edit ``/etc/rsyslog.conf`` and make the following change::
+#. On *Debian/Ubuntu*,  edit ``/etc/rsyslog.conf`` and make the following change::
 
     $PrivDropToGroup adm
 
 #. ``mkdir -p /var/log/swift/hourly``
-#. ``chown -R syslog.adm /var/log/swift``
+#. On *Debian/Ubuntu*,  ``chown -R syslog.adm /var/log/swift``
 #. ``chmod 775 /var/log/swift /var/log/swift/hourly``
-#. ``service rsyslog restart``
+#. ``systemctl restart rsyslog``
 #. ``usermod -a -G adm <your-user-name>``
 #. Relogin to let the group change take effect.
 #. Create ``/etc/swift/log-processor.conf``::
 
-    [log-processor]
+    [DEFAULT]
     swift_account = <your-stats-account-hash>
     user = <your-user-name>
+    new_log_cutoff = <log-cutoff-sec>
+
+    [log-processor]
+    container_name = log_processing_data
+    format_type = csv
 
     [log-processor-access]
-    swift_account = <your-stats-account-hash>
     container_name = log_data
     log_dir = /var/log/swift/hourly/
     source_filename_pattern = ^
@@ -48,60 +52,61 @@ environment.
         (?P<hour>[0-2][0-9])
         .*$
     class_path = slogging.access_processor.AccessLogProcessor
-    user = <your-user-name>
 
     [log-processor-stats]
-    swift_account = <your-stats-account-hash>
     container_name = account_stats
     log_dir = /var/log/swift/stats/
     class_path = slogging.stats_processor.StatsLogProcessor
     devices = /srv/1/node
     mount_check = false
-    user = <your-user-name>
 
     [log-processor-container-stats]
-    swift_account = <your-stats-account-hash>
     container_name = container_stats
     log_dir = /var/log/swift/stats/
     class_path = slogging.stats_processor.StatsLogProcessor
     processable = false
     devices = /srv/1/node
     mount_check = false
-    user = <your-user-name>
 
 #. Add the following under [app:proxy-server] in ``/etc/swift/proxy-server.conf``::
 
     log_facility = LOG_LOCAL1
 
+#. Run the following command to get slogging installed path.:
+
+    ``dirname $(which swift-log-uploader)``
+
+   The ``<installed-path>`` on cron.d/* below shall be replaced with the above results.
+
 #. Create a ``cron`` job to run once per hour to create the stats logs. In
    ``/etc/cron.d/swift-stats-log-creator``::
 
-    0 * * * * <your-user-name> /usr/local/bin/swift-account-stats-logger /etc/swift/log-processor.conf
+    0 * * * * <your-user-name> <installed-path>/swift-account-stats-logger /etc/swift/log-processor.conf
 
 #. Create a ``cron`` job to run once per hour to create the container stats logs. In
    ``/etc/cron.d/swift-container-stats-log-creator``::
 
-    5 * * * * <your-user-name> /usr/local/bin/swift-container-stats-logger /etc/swift/log-processor.conf
+    5 * * * * <your-user-name> <installed-path>/swift-container-stats-logger /etc/swift/log-processor.conf
 
 #. Create a ``cron`` job to run once per hour to upload the stats logs. In
    ``/etc/cron.d/swift-stats-log-uploader``::
 
-    10 * * * * <your-user-name> /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf stats
+    10 * * * * <your-user-name> <installed-path>/swift-log-uploader /etc/swift/log-processor.conf stats
 
 #. Create a ``cron`` job to run once per hour to upload the stats logs. In
    ``/etc/cron.d/swift-stats-log-uploader``::
 
-    15 * * * * <your-user-name> /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf container-stats
+    15 * * * * <your-user-name> <installed-path>/swift-log-uploader /etc/swift/log-processor.conf container-stats
 
 #. Create a ``cron`` job to run once per hour to upload the access logs. In
    ``/etc/cron.d/swift-access-log-uploader``::
 
-    5 * * * * <your-user-name> /usr/local/bin/swift-log-uploader /etc/swift/log-processor.conf access
+    5 * * * * <your-user-name> <installed-path>/swift-log-uploader /etc/swift/log-processor.conf access
 
 #. Create a ``cron`` job to run once per hour to process the logs. In
    ``/etc/cron.d/swift-stats-processor``::
 
-    30 * * * * <your-user-name> /usr/local/bin/swift-log-stats-collector /etc/swift/log-processor.conf
+    30 * * * * <your-user-name> <installed-path>/swift-log-stats-collector /etc/swift/log-processor.conf
 
 After running for a few hours, you should start to see .csv files in the
 ``log_processing_data`` container in the swift stats account that was created
