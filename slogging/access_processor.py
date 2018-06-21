@@ -31,7 +31,7 @@ try:
             if x.strip()])
 
     def sanitize_ips(line_data):
-        for x in ['lb_ip', 'client_ip', 'log_source']:
+        for x in ['lb_ip', 'client_ip']:
             if line_data[x] == '-':
                 line_data[x] = '0.0.0.0'
 except ImportError:
