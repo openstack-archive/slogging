@@ -1,0 +1,8 @@
+Code-Review+2: Keiichi Hikita <keiichi.hikita@gmail.com>
+Workflow+1: Keiichi Hikita <keiichi.hikita@gmail.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Thu, 16 Aug 2018 02:23:12 +0000
+Reviewed-on: https://review.openstack.org/577112
+Project: openstack/slogging
+Branch: refs/heads/master
