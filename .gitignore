@@ -1,8 +1,0 @@
-slogging.egg-info/
-*.py[co]
-doc/build/*
-dist
-.coverage
-deb_dist
-.tox
-.idea

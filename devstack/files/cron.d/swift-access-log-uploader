@@ -1,1 +1,0 @@
-5 * * * * %STACK_USER% export PYTHONPATH=$PYTHONPATH:%SLOGGING_BASE%; %SLOGGING_BASE%/bin/swift-log-uploader %SLOGGING_BASE%/etc/log-processor.conf access
